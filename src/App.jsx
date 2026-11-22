@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import AccountPanel from './AccountPanel';
+import AdminPanel from './AdminPanel';
 
 const productLabels = {
   green_beans: 'Green coffee beans',
@@ -186,6 +187,7 @@ export default function App() {
       </section>
 
       <AccountPanel />
+      <AdminPanel />
 
       <section className="supplier-section" id="suppliers">
         <div className="supplier-copy"><p className="eyebrow">GROW WITH MEA BOKO</p><h2>Bring your coffee<br />to a wider market.</h2><p>Are you a producer, supplier, exporter, roaster or coffee business? Apply to connect with domestic and international buyers.</p><div className="supplier-points"><span>✓ Domestic & export interest</span><span>✓ Green and roasted coffee</span><span>✓ Ethiopian coffee origins</span></div></div>
