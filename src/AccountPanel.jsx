@@ -19,7 +19,7 @@ export default function AccountPanel() {
       await supabase.from('profiles').insert({ id: currentUser.id, full_name: fullName, role: 'buyer' });
     }
     const { data: application } = await supabase.from('supplier_applications')
-      .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').maybeSingle();
+      .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').limit(1).maybeSingle();
     setApproved(Boolean(application));
     const { data: ownListings } = await supabase.from('coffee_listings')
       .select('id,name,product_type,market,status,quantity_kg,price,currency,created_at')
