@@ -76,7 +76,8 @@ export default function App() {
     if (!supabase || !selectedListing) return;
     setBusy(true);
     setError('');
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const { error: submitError } = await supabase.from('inquiries').insert({
       listing_id: selectedListing.id,
       sender_id: null,
@@ -93,7 +94,7 @@ export default function App() {
     }
     setInquirySent(true);
     setInquiryMessage('Your inquiry has been submitted. The MEA BOKO team can follow up using the contact details you provided.');
-    event.currentTarget.reset();
+    formElement.reset();
   }
 
   async function submitSupplier(event) {
@@ -101,7 +102,8 @@ export default function App() {
     if (!supabase) return;
     setBusy(true);
     setError('');
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const { error: submitError } = await supabase.from('supplier_applications').insert({
       user_id: null,
       contact_person: String(form.get('contact_person') || '').trim(),
@@ -119,7 +121,7 @@ export default function App() {
       return;
     }
     setSupplierSent(true);
-    event.currentTarget.reset();
+    formElement.reset();
   }
 
   return (
