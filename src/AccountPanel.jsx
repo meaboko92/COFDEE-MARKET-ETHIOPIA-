@@ -8,12 +8,14 @@ export default function AccountPanel() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [approved, setApproved] = useState(false);
+  const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
   const [origins, setOrigins] = useState([]);
 
   const loadAccount = useCallback(async (currentUser) => {
     if (!currentUser || !supabase) return;
-    const { data: profile } = await supabase.from('profiles').select('id').eq('id', currentUser.id).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('id,role').eq('id', currentUser.id).maybeSingle();
+    setRole(profile?.role || 'buyer');
     if (!profile) {
       const fullName = currentUser.user_metadata?.full_name || currentUser.email || 'MEA BOKO member';
       await supabase.from('profiles').insert({ id: currentUser.id, full_name: fullName, role: 'buyer' });
@@ -42,7 +44,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); }
+      else { setApproved(false); setListings([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -131,8 +133,8 @@ export default function AccountPanel() {
         </form>
       </> : <>
         <div className="account-user"><div><span className="account-avatar">{(user.email || 'M').slice(0,1).toUpperCase()}</span><div><b>{user.user_metadata?.full_name || user.email}</b><small>{user.email}</small></div></div><button className="text-link" onClick={signOut} disabled={busy}>Sign out</button></div>
-        <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Approved' : 'Approval pending'}</b></div>
-        {!approved ? <div className="notice">To publish coffee products, submit the supplier registration form below while signed in. The MEA BOKO team must approve your application before listing tools are enabled.</div> : <>
+        {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Approved' : 'Approval pending'}</b></div>}
+        {role === 'admin' ? <div className="notice account-message">Administrator access is active. Use the Admin Dashboard below to manage supplier applications, coffee listings and buyer inquiries.</div> : !approved ? <div className="notice">To publish coffee products, submit the supplier registration form below while signed in. The MEA BOKO team must approve your application before listing tools are enabled.</div> : <>
           <h3 className="account-subhead">Add a coffee listing</h3>
           <form onSubmit={addListing} className="account-form">
             <label>Product name<input name="name" required placeholder="e.g. Guji Hambela Washed Grade 1" /></label>
