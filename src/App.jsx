@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
+import AccountPanel from './AccountPanel';
 
 const productLabels = {
   green_beans: 'Green coffee beans',
@@ -104,8 +105,9 @@ export default function App() {
     setError('');
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const { data: { user } } = await supabase.auth.getUser();
     const { error: submitError } = await supabase.from('supplier_applications').insert({
-      user_id: null,
+      user_id: user?.id || null,
       contact_person: String(form.get('contact_person') || '').trim(),
       business_name: String(form.get('business_name') || '').trim(),
       email: String(form.get('email') || '').trim(),
@@ -182,6 +184,8 @@ export default function App() {
         <div className="section-head"><div><p className="eyebrow">THE PLACES BEHIND THE FLAVOR</p><h2>Explore Ethiopian origins</h2><p>Discover the coffee-growing regions represented in our marketplace.</p></div></div>
         <div className="origin-grid">{(origins.length ? origins : [{name:'Guji',region:'Oromia'},{name:'Sidama',region:'Sidama'},{name:'Yirgacheffe',region:'Gedeo'}]).map((item, index) => <article className={`origin-card origin-${index % 3}`} key={item.id || item.name}><span className="origin-number">0{index + 1}</span><div><h3>{item.name}</h3><p>{item.region}</p>{item.description && <small>{item.description}</small>}</div><span className="origin-arrow">↗</span></article>)}</div>
       </section>
+
+      <AccountPanel />
 
       <section className="supplier-section" id="suppliers">
         <div className="supplier-copy"><p className="eyebrow">GROW WITH MEA BOKO</p><h2>Bring your coffee<br />to a wider market.</h2><p>Are you a producer, supplier, exporter, roaster or coffee business? Apply to connect with domestic and international buyers.</p><div className="supplier-points"><span>✓ Domestic & export interest</span><span>✓ Green and roasted coffee</span><span>✓ Ethiopian coffee origins</span></div></div>
