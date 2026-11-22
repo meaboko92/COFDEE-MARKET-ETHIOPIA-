@@ -85,8 +85,9 @@ export default function AccountPanel() {
   async function addListing(event) {
     event.preventDefault();
     if (!user || !approved) return;
+    const formElement = event.currentTarget;
     setBusy(true); setError(''); setMessage('');
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const quantity = String(form.get('quantity_kg') || '').trim();
     const price = String(form.get('price') || '').trim();
     const payload = {
@@ -108,7 +109,7 @@ export default function AccountPanel() {
     if (insertError) setError(insertError.message);
     else {
       setMessage('Coffee listing submitted. It will appear publicly after MEA BOKO approval.');
-      event.currentTarget.reset();
+      formElement.reset();
       await loadAccount(user);
     }
   }
