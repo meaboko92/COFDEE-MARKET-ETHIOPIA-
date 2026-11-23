@@ -150,3 +150,7 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .export-quote-editor input,.export-quote-editor select,.export-quote-editor textarea{width:100%;box-sizing:border-box}
 .price-proposal-card>div:first-child{min-width:0;display:grid;gap:6px}
 .price-proposal-card small{overflow-wrap:anywhere}
+
+.buyer-business-panel{margin:24px 0;padding:20px;border:1px solid rgba(20,55,75,.14);border-radius:16px;background:#f8faf9}
+.buyer-business-panel .account-subhead{margin-top:0}
+.buyer-business-panel .account-form{max-width:100%}
