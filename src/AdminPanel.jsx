@@ -11,11 +11,13 @@ export default function AdminPanel() {
   const [listings, setListings] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -28,13 +30,21 @@ export default function AdminPanel() {
       supabase.from('orders')
         .select('id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
+      supabase.from('order_shipments')
+        .select('id,order_id,status,carrier,tracking_reference,dispatch_date,estimated_delivery_date,delivery_notes,created_at,updated_at')
+        .order('updated_at', { ascending: false }).limit(100),
+      supabase.from('order_delivery_confirmations')
+        .select('id,shipment_id,order_id,buyer_id,confirmed_at')
+        .order('confirmed_at', { ascending: false }).limit(100),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
     setInquiries(inquiriesResult.data || []);
     setOrders(ordersResult.data || []);
+    setShipments(shipmentsResult.data || []);
+    setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
   }, []);
 
   const checkAdmin = useCallback(async (currentUser) => {
@@ -116,6 +126,22 @@ export default function AdminPanel() {
         <div className="admin-record-main"><div><h4>{item.name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p><a href={'mailto:'+item.email}>{item.email}</a>{item.phone ? ' · '+item.phone : ''}</p><p>{item.message}</p><small>Listing reference: {item.listing_id || 'General inquiry'} · {new Date(item.created_at).toLocaleString()}</small></div>
         <div className="admin-actions">{item.status !== 'in_progress' && item.status !== 'closed' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'in_progress')}>Mark in progress</button>}{item.status !== 'closed' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'closed')}>Close inquiry</button>}</div>
       </article>) : <p className="admin-empty">No buyer inquiries yet.</p>}
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Delivery tracking</h3><span>{shipments.length} shipments · {deliveryConfirmations.length} receipts confirmed</span></div>
+      {shipments.length ? shipments.map((shipment) => {
+        const order = orders.find((record) => record.id === shipment.order_id);
+        const receipt = deliveryConfirmations.find((record) => record.shipment_id === shipment.id);
+        return <article className="admin-record" key={shipment.id}>
+          <div className="admin-record-main"><div><h4>Order {shipment.order_id.slice(0,8).toUpperCase()}</h4><span className={'listing-status status-'+shipment.status}>{shipment.status.replaceAll('_',' ')}</span></div>
+            <p>Quantity: {order ? Number(order.quantity_kg).toLocaleString()+' kg' : 'Order details unavailable'}</p>
+            <p>Carrier: {shipment.carrier || 'Not specified'} · Tracking: {shipment.tracking_reference || 'Not provided'}</p>
+            <p>Dispatch: {shipment.dispatch_date || 'Not set'} · Estimated delivery: {shipment.estimated_delivery_date || 'Not set'}</p>
+            {shipment.delivery_notes && <p>{shipment.delivery_notes}</p>}
+            <small>{receipt ? 'Buyer confirmed receipt: '+new Date(receipt.confirmed_at).toLocaleString() : 'Awaiting buyer receipt confirmation'}</small>
+          </div>
+        </article>;
+      }) : <p className="admin-empty">No shipments have been registered yet. Suppliers can add tracking details after an order is confirmed.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Trade order management</h3><span>{activeOrders.length} active</span></div>
