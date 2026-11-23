@@ -14,11 +14,12 @@ export default function AdminPanel() {
   const [shipments, setShipments] = useState([]);
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [tradeDocuments, setTradeDocuments] = useState([]);
+  const [exportDetails, setExportDetails] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -40,8 +41,11 @@ export default function AdminPanel() {
       supabase.from('order_trade_documents')
         .select('id,order_id,uploaded_by,document_type,original_filename,file_path,status,review_note,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(200),
+      supabase.from('order_export_details')
+        .select('id,order_id,destination_country,destination_port,importer_company,buyer_reference,coffee_variety,grade,process,moisture_percent,crop_year,lot_reference,bag_count,bag_weight_kg,packaging,export_notes,updated_at')
+        .order('updated_at', { ascending: false }).limit(200),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
@@ -50,6 +54,7 @@ export default function AdminPanel() {
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
+    setExportDetails(exportDetailsResult.data || []);
   }, []);
 
   const checkAdmin = useCallback(async (currentUser) => {
@@ -168,6 +173,30 @@ export default function AdminPanel() {
           </div>
         </article>;
       }) : <p className="admin-empty">No shipments have been registered yet. Suppliers can add tracking details after an order is confirmed.</p>}
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Export operations report</h3><span>{exportDetails.length} shipment profiles</span></div>
+      <div className="export-report-stats">
+        <div><b>{exportDetails.length}</b><small>Profiles recorded</small></div>
+        <div><b>{new Set(exportDetails.map((row) => row.destination_country.trim().toLowerCase())).size}</b><small>Destination countries</small></div>
+        <div><b>{exportDetails.reduce((sum,row) => sum + (Number(orders.find((order) => order.id === row.order_id)?.quantity_kg) || 0),0).toLocaleString()} kg</b><small>Order quantity in profiles</small></div>
+        <div><b>{tradeDocuments.filter((doc) => doc.status === 'uploaded' || doc.status === 'under_review').length}</b><small>Documents awaiting review</small></div>
+      </div>
+      {exportDetails.length ? exportDetails.map((row) => {
+        const order = orders.find((item) => item.id === row.order_id);
+        const shipment = shipments.find((item) => item.order_id === row.order_id);
+        const docs = tradeDocuments.filter((doc) => doc.order_id === row.order_id);
+        return <article className="admin-record" key={row.id}>
+          <div className="admin-record-main"><div><h4>{row.destination_country}{row.destination_port ? ' · '+row.destination_port : ''}</h4><span className={'listing-status status-'+(shipment?.status || 'preparing')}>{shipment?.status?.replaceAll('_',' ') || 'shipment not created'}</span></div>
+            <p>Order {row.order_id.slice(0,8).toUpperCase()} · {order ? Number(order.quantity_kg).toLocaleString()+' kg' : 'Order quantity unavailable'} · Buyer account {order?.buyer_id?.slice(0,8).toUpperCase() || '—'}</p>
+            <p>Importer: {row.importer_company || 'Not recorded'}{row.buyer_reference ? ' · Buyer ref: '+row.buyer_reference : ''}</p>
+            <p>Coffee: {[row.coffee_variety,row.grade,row.process].filter(Boolean).join(' · ') || 'Specification incomplete'}</p>
+            <p>Quality: {row.moisture_percent != null ? row.moisture_percent+'% moisture' : 'Moisture not recorded'} · Crop: {row.crop_year || '—'} · Lot: {row.lot_reference || '—'}</p>
+            <p>Packaging: {row.bag_count ?? '—'} bags{row.bag_weight_kg ? ' × '+row.bag_weight_kg+' kg' : ''} · {row.packaging || 'Packaging not recorded'} · Documents: {docs.length}</p>
+            <small>Updated {new Date(row.updated_at).toLocaleString()}</small>
+          </div>
+        </article>;
+      }) : <p className="admin-empty">No export shipment profiles have been recorded yet.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Export trade documents</h3><span>{tradeDocuments.length} files · {tradeDocuments.filter((doc) => doc.status === 'uploaded' || doc.status === 'under_review').length} awaiting review</span></div>
