@@ -154,3 +154,9 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .buyer-business-panel{margin:24px 0;padding:20px;border:1px solid rgba(20,55,75,.14);border-radius:16px;background:#f8faf9}
 .buyer-business-panel .account-subhead{margin-top:0}
 .buyer-business-panel .account-form{max-width:100%}
+
+.buyer-order-context,.buyer-export-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0;padding:12px 14px;border-radius:12px;background:#f4f8f6;border:1px solid rgba(18,70,54,.12);font-size:.88rem}
+.buyer-order-context b,.buyer-export-summary b{flex-basis:100%;color:#153c32}
+.buyer-order-context span,.buyer-export-summary span{color:#52645d}
+.buyer-export-summary{background:#f7f8fc;border-color:rgba(27,52,91,.12)}
+.buyer-export-summary b{color:#1d3558}
