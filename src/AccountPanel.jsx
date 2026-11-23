@@ -222,7 +222,7 @@ export default function AccountPanel() {
     setError('');
     const result = existing
       ? await supabase.from('order_shipments').update(payload).eq('id', existing.id).select('id').maybeSingle()
-      : await supabase.from('order_shipments').insert({ ...payload, order_id: orderId, status: 'preparing' }).select('id').maybeSingle();
+      : await supabase.from('order_shipments').insert({ order_id: orderId, status: 'preparing', carrier: payload.carrier, tracking_reference: payload.tracking_reference, dispatch_date: payload.dispatch_date, estimated_delivery_date: payload.estimated_delivery_date, delivery_notes: payload.delivery_notes }).select('id').maybeSingle();
     setMessageBusy((current) => ({ ...current, [orderId]: false }));
     if (result.error) { setError(result.error.message); return; }
     if (!result.data) { setError('Delivery details were not saved. Check that this is your confirmed order, then refresh.'); return; }
