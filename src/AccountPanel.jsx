@@ -150,7 +150,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
+      else { setApproved(false); setSupplierApplication(null); setVerificationDocs([]); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -212,7 +212,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setSupplierApplication(null); setVerificationDocs([]); setApproved(false); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function uploadSupplierVerificationDocument(event) {
