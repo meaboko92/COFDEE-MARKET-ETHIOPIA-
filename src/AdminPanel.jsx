@@ -21,12 +21,15 @@ export default function AdminPanel() {
   const [profiles, setProfiles] = useState([]);
   const [roleAudit, setRoleAudit] = useState([]);
   const [supplierAudit, setSupplierAudit] = useState([]);
+  const [verificationDocuments, setVerificationDocuments] = useState([]);
+  const [verificationAudit, setVerificationAudit] = useState([]);
+  const [documentNotes, setDocumentNotes] = useState({});
   const [applicationNotes, setApplicationNotes] = useState({});
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult, supplierAuditResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult, supplierAuditResult, verificationDocumentsResult, verificationAuditResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,review_note,reviewed_by,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -56,8 +59,10 @@ export default function AdminPanel() {
       supabase.from('profiles').select('id,full_name,phone,role,created_at,updated_at').order('created_at', { ascending: false }).limit(200),
       supabase.from('admin_role_audit').select('id,actor_user_id,target_user_id,old_role,new_role,created_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('supplier_application_audit').select('id,application_id,actor_user_id,old_status,new_status,review_note,created_at').order('created_at', { ascending: false }).limit(100),
+      supabase.from('supplier_verification_documents').select('id,user_id,application_id,document_type,file_path,original_file_name,mime_type,file_size_bytes,status,review_note,reviewed_at,created_at').order('created_at', { ascending: false }).limit(200),
+      supabase.from('supplier_verification_document_audit').select('id,document_id,actor_user_id,old_status,new_status,review_note,created_at').order('created_at', { ascending: false }).limit(100),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error || supplierAuditResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error || supplierAuditResult.error || verificationDocumentsResult.error || verificationAuditResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
@@ -68,6 +73,8 @@ export default function AdminPanel() {
     setProfiles(profilesResult.data || []);
     setRoleAudit(roleAuditResult.data || []);
     setSupplierAudit(supplierAuditResult.data || []);
+    setVerificationDocuments(verificationDocumentsResult.data || []);
+    setVerificationAudit(verificationAuditResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
@@ -180,6 +187,24 @@ export default function AdminPanel() {
     const { data, error: urlError } = await supabase.storage.from('trade-documents').createSignedUrl(document.file_path, 60);
     if (urlError) { setError(urlError.message); return; }
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  async function openSupplierVerificationDocument(document) {
+    const { data, error: urlError } = await supabase.storage.from('supplier-verification').createSignedUrl(document.file_path, 60);
+    if (urlError) { setError(urlError.message); return; }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  async function reviewSupplierVerificationDocument(document, status) {
+    setBusyId(document.id); setError(''); setNotice('');
+    const { error: updateError } = await supabase.from('supplier_verification_documents')
+      .update({ status, review_note: (documentNotes[document.id] || '').trim() || null })
+      .eq('id', document.id);
+    setBusyId('');
+    if (updateError) { setError(updateError.message); return; }
+    setNotice(status === 'approved' ? 'Business document approved. The business verification badge is now active when no other approved document is revoked.' : 'Business document review updated.');
+    setDocumentNotes((current) => ({ ...current, [document.id]: '' }));
+    await loadDashboard();
   }
 
   async function reviewSupplierApplication(application, status) {
@@ -369,6 +394,23 @@ export default function AdminPanel() {
         const application = applications.find((item) => item.id === entry.application_id);
         return <article className="admin-record" key={entry.id}><div className="admin-record-main"><b>{application?.business_name || 'Supplier application'}</b><p>{entry.old_status || 'new'} → {entry.new_status}</p>{entry.review_note && <p>Note: {entry.review_note}</p>}<small>Administrator {entry.actor_user_id?.slice(0,8).toUpperCase() || 'unknown'} · {new Date(entry.created_at).toLocaleString()}</small></div></article>;
       }) : <p className="admin-empty">No supplier decisions have been recorded yet.</p>}
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Supplier business document verification</h3><span>{verificationDocuments.filter((item) => item.status === 'pending').length} awaiting review</span></div>
+      <p className="account-hint">Review business registration, trade and cooperative documents. Files are private and open through short-lived administrator links.</p>
+      {verificationDocuments.length ? verificationDocuments.map((document) => {
+        const application = applications.find((item) => item.id === document.application_id);
+        return <article className="admin-record" key={document.id}>
+          <div className="admin-record-main"><div><h4>{application?.business_name || 'Supplier business document'}</h4><span className={'listing-status status-'+document.status}>{document.status}</span></div><p>{document.document_type.replaceAll('_',' ')} · {document.original_file_name}</p><p>{(document.file_size_bytes / 1024 / 1024).toFixed(2)} MB · {document.mime_type}</p><small>Supplier account {document.user_id.slice(0,8).toUpperCase()} · Submitted {new Date(document.created_at).toLocaleString()}</small>{document.reviewed_at && <small>Reviewed {new Date(document.reviewed_at).toLocaleString()}</small>}</div>
+          <div className="admin-actions"><button className="admin-secondary" disabled={busyId===document.id} onClick={() => openSupplierVerificationDocument(document)}>Open private file</button><label className="application-review-note">Review note<textarea rows="2" maxLength="1000" value={documentNotes[document.id] ?? document.review_note ?? ''} onChange={(event) => setDocumentNotes((current) => ({ ...current, [document.id]: event.target.value }))} placeholder="Optional reason or verification note" /></label>{document.status !== 'approved' && <button className="button button-gold" disabled={busyId===document.id} onClick={() => reviewSupplierVerificationDocument(document,'approved')}>Approve business document</button>}{document.status !== 'rejected' && <button className="admin-danger" disabled={busyId===document.id} onClick={() => reviewSupplierVerificationDocument(document,'rejected')}>Reject document</button>}</div>
+        </article>;
+      }) : <p className="admin-empty">No supplier business documents have been uploaded.</p>}
+      <h4>Business document review history</h4>
+      {verificationAudit.length ? verificationAudit.map((entry) => {
+        const document = verificationDocuments.find((item) => item.id === entry.document_id);
+        const application = applications.find((item) => item.id === document?.application_id);
+        return <article className="admin-record" key={entry.id}><div className="admin-record-main"><b>{application?.business_name || 'Supplier document'}</b><p>{entry.old_status || 'pending'} → {entry.new_status}</p>{entry.review_note && <p>Note: {entry.review_note}</p>}<small>Administrator {entry.actor_user_id?.slice(0,8).toUpperCase() || 'unknown'} · {new Date(entry.created_at).toLocaleString()}</small></div></article>;
+      }) : <p className="admin-empty">No business document review actions recorded yet.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Coffee listing moderation</h3><span>{pendingListings.length} to review</span></div>
