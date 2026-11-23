@@ -220,7 +220,8 @@ export default function AccountPanel() {
   async function uploadTradeDocument(order, event) {
     event.preventDefault();
     if (!user || !supabase || order.status !== 'confirmed' || !['export','both'].includes(order.coffee_listings?.market)) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const file = form.get('document_file');
     const documentType = String(form.get('document_type') || '');
     const allowedTypes = ['application/pdf','image/jpeg','image/png'];
@@ -254,7 +255,7 @@ export default function AccountPanel() {
     }
     setMessageBusy((current) => ({ ...current, [order.id]: false }));
     setMessage('Trade document uploaded to private order storage.');
-    event.currentTarget.reset();
+    formElement.reset();
     await loadAccount(user);
   }
 
