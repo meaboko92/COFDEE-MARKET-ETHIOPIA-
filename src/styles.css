@@ -182,3 +182,24 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .admin-role-label select:disabled{opacity:.65;cursor:not-allowed}
 
 .verification-panel{margin:22px 0;padding:18px;border:1px solid rgba(215,173,91,.28);border-radius:8px;background:rgba(12,48,34,.38)}.verification-panel>.account-hint{max-width:760px;line-height:1.65}.verification-upload-form{margin:16px 0;gap:13px}.verification-upload-form input[type=file]{width:100%;max-width:100%;padding:10px;border:1px dashed #65806b;border-radius:5px;background:#102f24;color:#e8eee8;font:12px 'DM Sans',sans-serif}.verification-document-list{margin-top:18px}.verification-document-list h4{margin:0 0 10px}.verification-document-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid rgba(180,203,183,.16)}.verification-document-row p{margin:5px 0;font-size:12px;overflow-wrap:anywhere}.verification-document-row small{display:block;color:#9bb1a0;font-size:10px}.verification-document-row .listing-status{flex-shrink:0}.admin-actions .application-review-note{min-width:min(280px,100%)}.admin-actions .admin-secondary{white-space:nowrap}
+
+
+/* MEA BOKO multilingual market assistant */
+.market-assistant{position:fixed;right:20px;bottom:18px;z-index:1000;font-family:'DM Sans',sans-serif}
+.assistant-launcher{display:flex;align-items:center;gap:9px;border:0;border-radius:999px;padding:14px 18px;background:#164832;color:#f2cf7d;box-shadow:0 8px 28px #102f2440;font:700 12px 'DM Sans',sans-serif;cursor:pointer}
+.assistant-window{width:min(370px,calc(100vw - 28px));height:min(570px,calc(100dvh - 100px));display:flex;flex-direction:column;overflow:hidden;background:#fbfcf8;border:1px solid #dce6db;border-radius:15px;box-shadow:0 18px 55px #102f2433;margin-bottom:12px}
+.assistant-header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:15px 17px;background:#123b2b;color:#fff}
+.assistant-header b,.assistant-header small{display:block}.assistant-header b{font-size:13px}.assistant-header small{font-size:10px;color:#d8e4d9;margin-top:4px}
+.assistant-header button{border:0;background:transparent;color:#fff;font-size:25px;cursor:pointer}
+.assistant-language{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;font-size:11px;color:#637365;border-bottom:1px solid #e5ebe3}
+.assistant-language select{border:1px solid #dce4da;border-radius:5px;padding:7px;background:#fff;color:#234431}
+.assistant-messages{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:9px}
+.assistant-bubble{align-self:flex-start;max-width:90%;padding:10px 12px;border-radius:12px 12px 12px 3px;background:#edf3eb;color:#294534;font-size:12px;line-height:1.55;white-space:pre-wrap}
+.assistant-bubble.user-bubble{align-self:flex-end;background:#174632;color:#fff;border-radius:12px 12px 3px 12px}
+.assistant-prompts{display:grid;gap:7px;padding:0 13px 12px}
+.assistant-prompts button{text-align:left;padding:9px 10px;border:1px solid #dbe5d9;border-radius:8px;background:#fff;color:#285239;font:11px 'DM Sans',sans-serif;cursor:pointer}
+.assistant-input{display:flex;gap:7px;padding:11px;border-top:1px solid #e3e9e1;background:#fff}
+.assistant-input input{flex:1;min-width:0;border:1px solid #dce4da;border-radius:7px;padding:10px;font:12px 'DM Sans',sans-serif}
+.assistant-input button{border:0;border-radius:7px;padding:0 13px;background:#e7bd69;color:#183b2b;font-weight:700;cursor:pointer}
+.assistant-disclaimer{margin:0;padding:0 12px 10px;background:#fff;color:#8a968b;font-size:9px}
+@media(max-width:480px){.market-assistant{right:12px;bottom:12px}.assistant-window{height:min(540px,calc(100dvh - 88px))}.assistant-launcher{padding:12px 15px}}
