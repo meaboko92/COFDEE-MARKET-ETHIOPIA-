@@ -1,99 +1,52 @@
-# COFFEE-MARKET-ETHIOPIA-
--- MEA-BOKO COFFEE ETHIOPIA
--- Initial database setup
+# MEA BOKO Coffee Ethiopia
 
-create extension if not exists pgcrypto;
+MEA BOKO is an Ethiopian coffee marketplace connecting producers, suppliers, cooperatives, brokers, exporters, roasters and buyers for domestic and international trade.
 
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  display_name text,
-  organization text,
-  role text not null default 'buyer'
-    check (role in ('buyer','supplier','admin')),
-  country text,
-  created_at timestamptz default now()
-);
+## Application
 
-create table if not exists public.origins (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  region text not null,
-  description text,
-  created_at timestamptz default now()
-);
+- React 18 and Vite
+- Supabase Auth, Postgres and Storage
+- Ethiopian coffee-origin hierarchy and catalogue
+- Buyer and supplier accounts
+- Supplier applications and administrator review
+- Coffee listings with product photos
+- Domestic and export marketplace filters
+- Inquiries, order requests, pricing discussions, shipment details and trade documents
+- Admin review and audit workflows
 
-create table if not exists public.listings (
-  id uuid primary key default gen_random_uuid(),
-  supplier_id uuid references public.profiles(id),
-  origin_id uuid references public.origins(id),
-  title text not null,
-  coffee_type text not null default 'green',
-  processing_method text,
-  grade text,
-  quantity_kg numeric(12,2),
-  market text default 'both',
-  status text not null default 'draft',
-  created_at timestamptz default now()
-);
+## Run locally
 
-create table if not exists public.inquiries (
-  id uuid primary key default gen_random_uuid(),
-  buyer_id uuid references public.profiles(id),
-  listing_id uuid references public.listings(id),
-  contact_name text not null,
-  contact_email text not null,
-  message text not null,
-  status text default 'new',
-  created_at timestamptz default now()
-);
+Requirements: Node.js 20 or newer.
 
-create table if not exists public.shipment_tracking (
-  id uuid primary key default gen_random_uuid(),
-  inquiry_id uuid references public.inquiries(id),
-  reference_code text unique not null,
-  status text default 'pending',
-  origin_location text,
-  destination_location text,
-  created_at timestamptz default now()
-);
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
 
--- Ethiopian coffee origins
+Set these browser-safe environment variables in `.env`:
 
-insert into public.origins (name, region, description)
-values
-('Guji', 'Oromia', 'Guji Ethiopian specialty coffee'),
-('Sidama', 'Sidama', 'Sidama washed and natural coffee'),
-('Yirgacheffe', 'South Ethiopia', 'Yirgacheffe specialty coffee'),
-('Limu', 'Oromia', 'Limu Ethiopian coffee'),
-('Harar', 'Eastern Ethiopia', 'Harar traditional coffee')
-on conflict (name) do nothing;
+```env
+VITE_SUPABASE_URL=https://mccgqmiatxzrcqczazpm.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_publishable_or_anon_key
+```
 
--- Enable database security
+Never use a Supabase `service_role` key or secret key in frontend code, GitHub Pages build variables, or any variable prefixed with `VITE_`.
 
-alter table public.profiles enable row level security;
-alter table public.origins enable row level security;
-alter table public.listings enable row level security;
-alter table public.inquiries enable row level security;
-alter table public.shipment_tracking enable row level security;
+## Database and storage
 
--- Public users can view coffee origins
+The current frontend uses the `coffee_listings`, `origins`, `supplier_applications`, `verified_suppliers`, `profiles`, buyer, order, shipment, document and audit tables. The live Supabase project has its own applied migration history; the short legacy SQL example that previously appeared in this README was incomplete and must not be used as the current production schema.
 
-drop policy if exists "Public can view origins"
-on public.origins;
+Supplier product photos use the `coffee-product-photos` Storage bucket. It is configured for JPG, PNG and WEBP files up to 5 MB. Keep Row Level Security enabled and retain the approved-supplier upload restrictions.
 
-create policy "Public can view origins"
-on public.origins
-for select
-to anon, authenticated
-using (true);
+For database changes, use reviewed, version-controlled Supabase migrations. Do not paste an old schema over the live database.
 
--- Public users can view published listings
+## Deploy
 
-drop policy if exists "Public can view published listings"
-on public.listings;
+The site is configured for GitHub Pages:
 
-create policy "Public can view published listings"
-on public.listings
-for select
-to anon, authenticated
-using (status = 'published');
+https://meaboko92.github.io/COFDEE-MARKET-ETHIOPIA-/
+
+GitHub Actions runs the build and deploy workflows on pushes to `main`. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the deployment configuration.
+
+A successful Vite build confirms that the frontend compiles; it does not by itself prove that sign-in, RLS policies, database writes, administrator permissions or photo uploads work. Test those flows with separate buyer, supplier and administrator accounts before opening the marketplace to the public.
