@@ -190,7 +190,10 @@ export default function AccountPanel() {
     if (mode === 'signup') {
       result = await supabase.auth.signUp({
         email, password,
-        options: { data: { full_name: String(form.get('full_name') || '').trim() } },
+        options: {
+          data: { full_name: String(form.get('full_name') || '').trim() },
+          emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+        },
       });
       if (!result.error && !result.data.session) {
         setMessage('Account created. Check your email to confirm your address, then sign in.');
