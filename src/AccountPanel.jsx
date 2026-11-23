@@ -14,6 +14,8 @@ export default function AccountPanel() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [approved, setApproved] = useState(false);
+  const [supplierApplication, setSupplierApplication] = useState(null);
+  const [verificationDocs, setVerificationDocs] = useState([]);
   const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
   const [inventoryHistory, setInventoryHistory] = useState([]);
@@ -50,6 +52,16 @@ export default function AccountPanel() {
     const { data: verification } = await supabase.from('verified_suppliers')
       .select('user_id,verified_at').eq('user_id', currentUser.id).maybeSingle();
     setApproved(Boolean(verification));
+    const { data: latestApplication } = await supabase.from('supplier_applications')
+      .select('id,business_name,status,created_at').eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    setSupplierApplication(latestApplication || null);
+    if (latestApplication) {
+      const { data: documents } = await supabase.from('supplier_verification_documents')
+        .select('id,document_type,original_file_name,status,review_note,reviewed_at,created_at')
+        .eq('application_id', latestApplication.id).order('created_at', { ascending: false });
+      setVerificationDocs(documents || []);
+    } else setVerificationDocs([]);
     const { data: ownListings } = await supabase.from('coffee_listings')
       .select('id,name,product_type,market,status,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
@@ -201,6 +213,42 @@ export default function AccountPanel() {
     setBusy(false);
     if (signOutError) setError(signOutError.message);
     else { setUser(null); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
+  }
+
+  async function uploadSupplierVerificationDocument(event) {
+    event.preventDefault();
+    if (!supabase || !user || !supplierApplication) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const file = form.get('business_document');
+    const documentType = String(form.get('document_type') || '');
+    const allowedTypes = ['application/pdf','image/jpeg','image/png'];
+    if (!(file instanceof File) || !file.size) { setError('Choose a business document to upload.'); return; }
+    if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setError('Upload a PDF, JPG or PNG file no larger than 10 MB.'); return;
+    }
+    setBusy(true); setError(''); setMessage('');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'business-document';
+    const filePath = user.id + '/' + supplierApplication.id + '/' + Date.now() + '-' + safeName;
+    const { error: uploadError } = await supabase.storage.from('supplier-verification')
+      .upload(filePath, file, { contentType: file.type, upsert: false });
+    if (uploadError) { setBusy(false); setError(uploadError.message); return; }
+    const { error: insertError } = await supabase.from('supplier_verification_documents').insert({
+      user_id: user.id,
+      application_id: supplierApplication.id,
+      document_type: documentType,
+      file_path: filePath,
+      original_file_name: file.name.slice(0, 180),
+      mime_type: file.type,
+      file_size_bytes: file.size,
+    });
+    if (insertError) {
+      await supabase.storage.from('supplier-verification').remove([filePath]);
+      setBusy(false); setError(insertError.message); return;
+    }
+    setBusy(false); setMessage('Business document uploaded securely for administrator review.');
+    formElement.reset();
+    await loadAccount(user);
   }
 
   async function addListing(event) {
@@ -578,7 +626,22 @@ export default function AccountPanel() {
             <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Saving…' : 'Save buyer profile'} <span>↗</span></button>
           </form>
         </section>}
-        {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Verified supplier' : 'Not yet verified'}</b></div>}
+        {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Approved supplier' : 'Not yet approved'}</b></div>}
+        {role !== 'admin' && <section className="verification-panel">
+          <h3 className="account-subhead">Business document verification</h3>
+          <p className="account-hint">Upload a business registration, trade license, exporter license, cooperative certificate, tax registration or coffee quality certificate. Files are private and visible only to you and authorized MEA BOKO administrators. Do not upload passports or personal identity cards.</p>
+          {!supplierApplication ? <p className="admin-empty">Sign in and submit a supplier application to attach business documents to your application.</p> : <>
+            <form onSubmit={uploadSupplierVerificationDocument} className="account-form verification-upload-form">
+              <label>Document type<select name="document_type" required defaultValue="business_registration"><option value="business_registration">Business registration</option><option value="trade_license">Trade license</option><option value="export_license">Exporter license</option><option value="cooperative_certificate">Cooperative certificate</option><option value="tax_registration">Tax registration</option><option value="coffee_quality_certificate">Coffee quality certificate</option><option value="other_business_document">Other business document</option></select></label>
+              <label>Choose file<input name="business_document" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required /></label>
+              <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Uploading…' : 'Upload business document'} <span>↗</span></button>
+            </form>
+            <div className="verification-document-list">
+              <h4>Submitted documents</h4>
+              {verificationDocs.length ? verificationDocs.map((doc) => <article className="verification-document-row" key={doc.id}><div><b>{doc.document_type.replaceAll('_',' ')}</b><p>{doc.original_file_name}</p><small>{new Date(doc.created_at).toLocaleDateString()}{doc.reviewed_at ? ' · Reviewed ' + new Date(doc.reviewed_at).toLocaleDateString() : ''}</small>{doc.review_note && <p className="account-hint">Review note: {doc.review_note}</p>}</div><span className={'listing-status status-'+doc.status}>{doc.status}</span></article>) : <p className="admin-empty">No business documents uploaded yet.</p>}
+            </div>
+          </>}
+        </section>}
         {role === 'admin' ? <div className="notice account-message">Administrator access is active. Use the Admin Dashboard below to manage supplier applications, coffee listings and buyer inquiries.</div> : !approved ? <div className="notice">To publish coffee products, submit the supplier registration form below while signed in. The MEA BOKO team must approve your application before listing tools are enabled.</div> : <>
           <h3 className="account-subhead">Add a coffee listing</h3>
           <form onSubmit={addListing} className="account-form">
