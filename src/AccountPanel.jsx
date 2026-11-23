@@ -11,6 +11,10 @@ export default function AccountPanel() {
   const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [orderMessages, setOrderMessages] = useState([]);
+  const [messageDrafts, setMessageDrafts] = useState({});
+  const [priceDrafts, setPriceDrafts] = useState({});
+  const [messageBusy, setMessageBusy] = useState({});
   const [origins, setOrigins] = useState([]);
 
   const loadAccount = useCallback(async (currentUser) => {
@@ -28,10 +32,22 @@ export default function AccountPanel() {
       .select('id,name,product_type,market,status,quantity_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
     setListings(ownListings || []);
-    const { data: ownOrders, error: ordersError } = await supabase.from('orders')
-      .select('id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings(name)')
-      .eq('buyer_id', currentUser.id).order('created_at', { ascending: false }).limit(50);
-    setOrders(ordersError ? [] : (ownOrders || []));
+    const orderSelect = 'id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings!inner(name,supplier_id)';
+    const [buyerResult, supplierResult] = await Promise.all([
+      supabase.from('orders').select(orderSelect).eq('buyer_id', currentUser.id).order('created_at', { ascending: false }).limit(50),
+      supabase.from('orders').select(orderSelect).eq('coffee_listings.supplier_id', currentUser.id).order('created_at', { ascending: false }).limit(50),
+    ]);
+    const orderMap = new Map();
+    [...(buyerResult.data || []), ...(supplierResult.data || [])].forEach((order) => orderMap.set(order.id, order));
+    const participantOrders = [...orderMap.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setOrders(participantOrders);
+    if (participantOrders.length) {
+      const { data: messages } = await supabase.from('order_messages')
+        .select('id,order_id,sender_id,body,proposed_price,currency,created_at')
+        .in('order_id', participantOrders.map((order) => order.id))
+        .order('created_at', { ascending: true });
+      setOrderMessages(messages || []);
+    } else setOrderMessages([]);
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
   }, []);
@@ -86,7 +102,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setMessage('You have signed out.'); }
+    else { setUser(null); setOrders([]); setOrderMessages([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -121,6 +137,38 @@ export default function AccountPanel() {
     }
   }
 
+  async function sendOrderMessage(orderId, event) {
+    event.preventDefault();
+    if (!user || !supabase) return;
+    const body = String(messageDrafts[orderId] || '').trim();
+    const rawPrice = String(priceDrafts[orderId] || '').trim();
+    const proposedPrice = rawPrice ? Number(rawPrice) : null;
+    if (!body && !rawPrice) return;
+    if (rawPrice && (!Number.isFinite(proposedPrice) || proposedPrice <= 0)) {
+      setError('Enter a price greater than zero, or leave the price field blank.');
+      return;
+    }
+    setMessageBusy((current) => ({ ...current, [orderId]: true }));
+    setError('');
+    const order = orders.find((item) => item.id === orderId);
+    const { error: sendError } = await supabase.from('order_messages').insert({
+      order_id: orderId,
+      sender_id: user.id,
+      body,
+      proposed_price: proposedPrice,
+      currency: order?.currency || 'ETB',
+    });
+    setMessageBusy((current) => ({ ...current, [orderId]: false }));
+    if (sendError) { setError(sendError.message); return; }
+    setMessageDrafts((current) => ({ ...current, [orderId]: '' }));
+    setPriceDrafts((current) => ({ ...current, [orderId]: '' }));
+    const { data: refreshed } = await supabase.from('order_messages')
+      .select('id,order_id,sender_id,body,proposed_price,currency,created_at')
+      .in('order_id', orders.map((item) => item.id))
+      .order('created_at', { ascending: true });
+    setOrderMessages(refreshed || []);
+  }
+
   if (!isSupabaseConfigured) return <section className="account-section" id="account"><div className="account-card"><h2>Member account</h2><p>Supabase connection settings are needed before accounts can be used.</p></div></section>;
 
   return <section className="account-section" id="account">
@@ -151,8 +199,20 @@ export default function AccountPanel() {
             <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit coffee listing'} <span>↗</span></button>
           </form>
         </>}
-        <h3 className="account-subhead">Your trade orders</h3>
-        {orders.length ? <div className="own-listings">{orders.map((item) => <div key={item.id}><span><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></span><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>)}</div> : <p className="account-hint">You have not submitted any coffee order requests yet.</p>}
+        <h3 className="account-subhead">Trade orders & private messages</h3>
+        <p className="account-hint">Discuss order details directly with the other party. Only the buyer, the supplier for that listing, and MEA BOKO administrators can access these messages.</p>
+        {orders.length ? <div className="trade-order-list">{orders.map((item) => {
+          const isBuyer = item.buyer_id === user.id;
+          const thread = orderMessages.filter((message) => message.order_id === item.id);
+          return <article className="trade-order-card" key={item.id}>
+            <div className="trade-order-head"><div><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{isBuyer ? 'Buyer view' : 'Supplier view'} · {Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></div><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
+            <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Price proposal: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
+            <form className="order-message-form" onSubmit={(event) => sendOrderMessage(item.id, event)}>
+              <label>Message<textarea rows="2" maxLength="3000" value={messageDrafts[item.id] || ''} onChange={(event) => setMessageDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Discuss quality, delivery, documents or other order details…" /></label>
+              <div className="form-row"><label>Optional price proposal ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim())}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
+            </form>
+          </article>;
+        })}</div> : <p className="account-hint">You have no buyer or supplier trade orders yet.</p>}
         <h3 className="account-subhead">Your coffee listings</h3>
         {listings.length ? <div className="own-listings">{listings.map((item) => <div key={item.id}><span><b>{item.name}</b><small>{item.product_type.replaceAll('_',' ')} · {item.market}</small></span><span className={'listing-status status-'+item.status}>{item.status}</span></div>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
       </>}
