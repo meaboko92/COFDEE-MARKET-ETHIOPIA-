@@ -20,13 +20,15 @@ export default function AdminPanel() {
   const [paymentRecords, setPaymentRecords] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [roleAudit, setRoleAudit] = useState([]);
+  const [supplierAudit, setSupplierAudit] = useState([]);
+  const [applicationNotes, setApplicationNotes] = useState({});
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult, supplierAuditResult] = await Promise.all([
       supabase.from('supplier_applications')
-        .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
+        .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,review_note,reviewed_by,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
         .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,status,created_at,origins(name,region)')
@@ -53,8 +55,9 @@ export default function AdminPanel() {
       supabase.from('order_payment_records').select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at').order('created_at', { ascending: false }).limit(300),
       supabase.from('profiles').select('id,full_name,phone,role,created_at,updated_at').order('created_at', { ascending: false }).limit(200),
       supabase.from('admin_role_audit').select('id,actor_user_id,target_user_id,old_role,new_role,created_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('supplier_application_audit').select('id,application_id,actor_user_id,old_status,new_status,review_note,created_at').order('created_at', { ascending: false }).limit(100),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error || supplierAuditResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
@@ -64,6 +67,7 @@ export default function AdminPanel() {
     setPaymentRecords(paymentsResult.data || []);
     setProfiles(profilesResult.data || []);
     setRoleAudit(roleAuditResult.data || []);
+    setSupplierAudit(supplierAuditResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
@@ -176,6 +180,18 @@ export default function AdminPanel() {
     const { data, error: urlError } = await supabase.storage.from('trade-documents').createSignedUrl(document.file_path, 60);
     if (urlError) { setError(urlError.message); return; }
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  async function reviewSupplierApplication(application, status) {
+    setBusyId(application.id); setError(''); setNotice('');
+    const { error: updateError } = await supabase.from('supplier_applications')
+      .update({ status, review_note: (applicationNotes[application.id] || '').trim() || null })
+      .eq('id', application.id);
+    setBusyId('');
+    if (updateError) { setError(updateError.message); return; }
+    setNotice('Supplier application reviewed. The decision and administrator are recorded in the audit history.');
+    setApplicationNotes((current) => ({ ...current, [application.id]: '' }));
+    await loadDashboard();
   }
 
   async function changeStatus(table, id, status) {
@@ -346,8 +362,13 @@ export default function AdminPanel() {
       <div className="admin-block-head"><h3>Supplier applications</h3><span>{pendingApplications.length} to review</span></div>
       {applications.length ? applications.map((item) => <article className="admin-record" key={item.id}>
         <div className="admin-record-main"><div><h4>{item.business_name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p>{item.contact_person} · {item.business_role}</p><p><a href={'mailto:'+item.email}>{item.email}</a> · {item.phone}</p><p>Market: {item.market_interest}</p>{item.coffee_details && <p>{item.coffee_details}</p>}<small>{new Date(item.created_at).toLocaleString()}</small></div>
-        <div className="admin-actions">{item.status !== 'approved' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('supplier_applications',item.id,'approved')}>Approve supplier</button>}{item.status !== 'under_review' && item.status !== 'approved' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('supplier_applications',item.id,'under_review')}>Under review</button>}{item.status !== 'rejected' && <button className="admin-danger" disabled={busyId===item.id} onClick={() => changeStatus('supplier_applications',item.id,'rejected')}>Reject</button>}</div>
+        <div className="admin-actions"><label className="application-review-note">Administrator review note<textarea rows="2" maxLength="1000" value={applicationNotes[item.id] ?? item.review_note ?? ''} onChange={(event) => setApplicationNotes((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Optional reason or verification note" /></label>{item.status !== 'approved' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => reviewSupplierApplication(item,'approved')}>Approve & verify supplier</button>}{item.status !== 'under_review' && item.status !== 'approved' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => reviewSupplierApplication(item,'under_review')}>Mark under review</button>}{item.status !== 'rejected' && <button className="admin-danger" disabled={busyId===item.id} onClick={() => reviewSupplierApplication(item,'rejected')}>Reject application</button>}{item.reviewed_at && <small>Last reviewed {new Date(item.reviewed_at).toLocaleString()}</small>}</div>
       </article>) : <p className="admin-empty">No supplier applications yet.</p>}
+      <h4>Supplier approval history</h4>
+      {supplierAudit.length ? supplierAudit.map((entry) => {
+        const application = applications.find((item) => item.id === entry.application_id);
+        return <article className="admin-record" key={entry.id}><div className="admin-record-main"><b>{application?.business_name || 'Supplier application'}</b><p>{entry.old_status || 'new'} → {entry.new_status}</p>{entry.review_note && <p>Note: {entry.review_note}</p>}<small>Administrator {entry.actor_user_id?.slice(0,8).toUpperCase() || 'unknown'} · {new Date(entry.created_at).toLocaleString()}</small></div></article>;
+      }) : <p className="admin-empty">No supplier decisions have been recorded yet.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Coffee listing moderation</h3><span>{pendingListings.length} to review</span></div>
