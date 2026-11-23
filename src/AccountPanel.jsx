@@ -16,6 +16,7 @@ export default function AccountPanel() {
   const [approved, setApproved] = useState(false);
   const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
+  const [inventoryHistory, setInventoryHistory] = useState([]);
   const [orders, setOrders] = useState([]);
   const [orderMessages, setOrderMessages] = useState([]);
   const [orderProposals, setOrderProposals] = useState([]);
@@ -49,9 +50,16 @@ export default function AccountPanel() {
       .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').limit(1).maybeSingle();
     setApproved(Boolean(application));
     const { data: ownListings } = await supabase.from('coffee_listings')
-      .select('id,name,product_type,market,status,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,created_at')
+      .select('id,name,product_type,market,status,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
     setListings(ownListings || []);
+    if (ownListings?.length) {
+      const { data: historyRows } = await supabase.from('coffee_inventory_history')
+        .select('id,listing_id,previous_quantity_kg,new_quantity_kg,previous_threshold_kg,new_threshold_kg,change_type,created_at,coffee_listings(name)')
+        .in('listing_id', ownListings.map((listing) => listing.id))
+        .order('created_at', { ascending: false }).limit(100);
+      setInventoryHistory(historyRows || []);
+    } else setInventoryHistory([]);
     const orderSelect = 'id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings!inner(name,supplier_id,market)';
     const [buyerResult, supplierResult] = await Promise.all([
       supabase.from('orders').select(orderSelect).eq('buyer_id', currentUser.id).order('created_at', { ascending: false }).limit(50),
@@ -195,6 +203,31 @@ export default function AccountPanel() {
       formElement.reset();
       await loadAccount(user);
     }
+  }
+
+  async function updateListingInventory(listing, event) {
+    event.preventDefault();
+    if (!user || listing.status !== 'approved') return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const quantity = Number(form.get('quantity_kg'));
+    const threshold = Number(form.get('low_stock_threshold_kg'));
+    if (!Number.isFinite(quantity) || quantity < Number(listing.reserved_quantity_kg || 0)) {
+      setError('Stock quantity cannot be lower than the reserved quantity.');
+      return;
+    }
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      setError('Low-stock threshold must be zero or greater.');
+      return;
+    }
+    setBusy(true); setError(''); setMessage('');
+    const { error: updateError } = await supabase.from('coffee_listings')
+      .update({ quantity_kg: quantity, low_stock_threshold_kg: threshold })
+      .eq('id', listing.id).eq('supplier_id', user.id).eq('status', 'approved');
+    setBusy(false);
+    if (updateError) { setError(updateError.message); return; }
+    setMessage('Inventory updated. Available stock and inventory history have been refreshed.');
+    await loadAccount(user);
   }
 
   async function sendOrderMessage(orderId, event) {
@@ -666,7 +699,22 @@ export default function AccountPanel() {
           </article>;
         })}</div> : <p className="account-hint">You have no buyer or supplier trade orders yet.</p>}
         <h3 className="account-subhead">Your coffee listings</h3>
-        {listings.length ? <div className="own-listings">{listings.map((item) => <div key={item.id}><span><b>{item.name}</b><small>{item.product_type.replaceAll('_',' ')} · {item.market} · {item.available_quantity_kg == null ? 'Stock quantity not set' : Number(item.available_quantity_kg).toLocaleString()+' kg available'} · {Number(item.reserved_quantity_kg || 0).toLocaleString()} kg reserved</small></span><span className={'listing-status status-'+item.status}>{item.status}</span></div>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
+        {listings.length ? <div className="own-listings">{listings.map((item) => <article className="admin-record" key={item.id}>
+          <div className="admin-record-main">
+            <div><b>{item.name}</b> <span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
+            <p>{item.product_type.replaceAll('_',' ')} · {item.market}</p>
+            <p><b>{item.available_quantity_kg == null ? 'Stock quantity not set' : Number(item.available_quantity_kg).toLocaleString()+' kg available'}</b> · {Number(item.reserved_quantity_kg || 0).toLocaleString()} kg reserved · {Number(item.quantity_kg || 0).toLocaleString()} kg total</p>
+            {item.status === 'approved' && item.available_quantity_kg != null && Number(item.available_quantity_kg) <= Number(item.low_stock_threshold_kg || 0) && <p className="account-error" role="status">Low-stock alert: only {Number(item.available_quantity_kg).toLocaleString()} kg available. Threshold: {Number(item.low_stock_threshold_kg || 0).toLocaleString()} kg.</p>}
+            {item.status === 'approved' && <form className="account-form" onSubmit={(event) => updateListingInventory(item,event)}>
+              <div className="form-row">
+                <label>New total stock (kg)<input name="quantity_kg" type="number" min={Number(item.reserved_quantity_kg || 0)} step="0.01" defaultValue={item.quantity_kg ?? ''} required /></label>
+                <label>Low-stock alert at (kg)<input name="low_stock_threshold_kg" type="number" min="0" step="0.01" defaultValue={item.low_stock_threshold_kg ?? 50} required /></label>
+              </div>
+              <button type="submit" disabled={busy}>Update inventory</button>
+            </form>}
+          </div>
+        </article>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
+        {inventoryHistory.length > 0 && <div className="account-subsection"><h4>Inventory change history</h4>{inventoryHistory.map((entry) => <p key={entry.id} className="account-hint"><b>{entry.coffee_listings?.name || 'Coffee listing'}</b> · {entry.change_type.replaceAll('_',' ')} · {Number(entry.previous_quantity_kg || 0).toLocaleString()} → {Number(entry.new_quantity_kg || 0).toLocaleString()} kg · {new Date(entry.created_at).toLocaleString()}</p>)}</div>}
       </>}
     </div>
   </section>;
