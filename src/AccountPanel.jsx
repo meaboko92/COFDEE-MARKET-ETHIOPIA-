@@ -152,8 +152,9 @@ export default function AccountPanel() {
       if (session?.user) loadAccount(session.user);
       else { setApproved(false); setSupplierApplication(null); setVerificationDocs([]); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
     });
-    const refreshSupplierApplication = () => {
-      if (mounted && user) loadAccount(user);
+    const refreshSupplierApplication = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (mounted && data.user) loadAccount(data.user);
     };
     window.addEventListener('mea-boko-supplier-application-updated', refreshSupplierApplication);
     return () => {
