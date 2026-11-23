@@ -134,7 +134,7 @@ export default function SupplierListingPanel({ origins = [] }) {
         : <form className="supplier-product-form" onSubmit={submitListing}>
           <div className="form-row">
             <label>Product name<input name="name" required maxLength="120" placeholder="e.g. Guji Hambela Grade 1" /></label>
-            <label>Coffee origin<select name="origin_id" defaultValue=""><option value="">Select origin</option>{origins.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.region || 'Ethiopia'}</option>)}</select></label>
+            <label>Coffee origin<select name="origin_id" defaultValue=""><option value="">Select origin</option>{origins.filter((item) => item.origin_level === 'origin').map((item) => <option key={item.id} value={item.id}>{[origins.find((parent) => parent.id === item.parent_id)?.name, item.name, item.region || 'Ethiopia'].filter(Boolean).join(' — ')}</option>)}</select></label>
           </div>
           <div className="form-row">
             <label>Product type<select name="product_type" defaultValue="green_beans"><option value="green_beans">Green coffee beans</option><option value="roasted_beans">Roasted coffee beans</option><option value="ground_coffee">Ground coffee</option></select></label>
