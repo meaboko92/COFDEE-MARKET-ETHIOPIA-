@@ -60,3 +60,8 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
   .admin-record{flex-direction:column}
   .admin-actions{width:100%}
 }
+
+/* Buyer order request controls */
+.product-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.product-actions .button{padding:11px 12px;font-size:11px}
+@media(max-width:520px){.product-actions{width:100%;justify-content:flex-start}.product-bottom{align-items:flex-start;gap:12px;flex-wrap:wrap}.product-actions .button{flex:1 1 120px}}
