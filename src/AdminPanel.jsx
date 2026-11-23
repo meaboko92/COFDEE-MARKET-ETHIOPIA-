@@ -26,7 +26,7 @@ export default function AdminPanel() {
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
-        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,price,currency,status,created_at,origins(name,region)')
+        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,status,created_at,origins(name,region)')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
@@ -194,13 +194,14 @@ export default function AdminPanel() {
         .reduce((sum, order) => sum + Number(order.quantity_kg || 0) * Number(order.agreed_price || 0), 0),
     })).filter((item) => item.value > 0);
     const approvedInventoryKg = supplierListings.filter((listing) => listing.status === 'approved')
-      .reduce((sum, listing) => sum + Number(listing.quantity_kg || 0), 0);
+      .reduce((sum, listing) => sum + Number(listing.available_quantity_kg || 0), 0);
     return { ...supplier, supplierListings, supplierOrders, confirmedOrders, quantitySold, orderValueByCurrency, approvedInventoryKg };
   }).filter((supplier) => supplier.supplierListings.length || supplier.supplierOrders.length);
   const inventorySummary = ['approved','pending','sold_out','rejected'].map((status) => ({
     status,
     count: listings.filter((listing) => listing.status === status).length,
-    quantity: listings.filter((listing) => listing.status === status).reduce((sum, listing) => sum + Number(listing.quantity_kg || 0), 0),
+    quantity: listings.filter((listing) => listing.status === status).reduce((sum, listing) => sum + Number(listing.available_quantity_kg || 0), 0),
+    reserved: listings.filter((listing) => listing.status === status).reduce((sum, listing) => sum + Number(listing.reserved_quantity_kg || 0), 0),
   }));
   const salesSummary = ['ETB','USD','EUR'].map((currency) => ({
     currency,
@@ -223,7 +224,7 @@ export default function AdminPanel() {
     <div className="admin-block">
       <div className="admin-block-head"><h3>Supplier performance & coffee inventory</h3><span>{supplierPerformance.length} suppliers with marketplace activity</span></div>
       <div className="export-report-stats">
-        {inventorySummary.map((item) => <div key={item.status}><b>{item.count}</b><small>{item.status.replace('_',' ')} listings · {item.quantity.toLocaleString()} kg listed</small></div>)}
+        {inventorySummary.map((item) => <div key={item.status}><b>{item.count}</b><small>{item.status.replace('_',' ')} listings · {item.quantity.toLocaleString()} kg available · {item.reserved.toLocaleString()} kg reserved</small></div>)}
       </div>
       <h4>Confirmed trade activity</h4>
       <div className="export-report-stats">
