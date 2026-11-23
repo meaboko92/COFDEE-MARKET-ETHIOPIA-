@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { supabase } from './lib/supabase';
 
 const copy = {
   en: {
@@ -13,7 +14,10 @@ const copy = {
       'Open Marketplace and use the search and filters to explore approved coffee listings by product type, market and origin. New listings appear after supplier and listing review.',
       'For assistance, use the contact details published on the MEA BOKO website or send a message through the relevant marketplace inquiry form.'
     ],
-    fallback: 'I can currently help with supplier registration, finding coffee listings and marketplace contact guidance. For account-specific questions, please contact the MEA BOKO team.'
+    fallback: 'I can help with coffee marketplace questions. For account-specific issues, please contact the MEA BOKO team.',
+    signIn: 'Please sign in to your MEA BOKO account to use the AI assistant.',
+    failed: 'The AI assistant is not ready yet. Please try again later or contact support.',
+    thinking: 'Thinking…'
   },
   am: {
     title: 'የMEA BOKO የገበያ ረዳት',
@@ -27,7 +31,8 @@ const copy = {
       'በMarketplace ውስጥ የፍለጋና ማጣሪያ መሳሪያዎችን በመጠቀም በቡና አይነት፣ ገበያና አመጣጥ ይፈልጉ።',
       'እገዛ ለማግኘት በMEA BOKO ድረ-ገጽ ላይ የታተሙትን የመገኛ መረጃዎች ይጠቀሙ ወይም በገበያው የጥያቄ ቅጽ መልዕክት ይላኩ።'
     ],
-    fallback: 'በአቅራቢ ምዝገባ፣ የቡና ዝርዝሮችን ማግኘትና የገበያ መገናኛ መረጃ ላይ እረዳለሁ። ለመለያዎ የተለየ ጥያቄ የMEA BOKO ቡድንን ያነጋግሩ።'
+    fallback: 'በአቅራቢ ምዝገባ፣ የቡና ዝርዝሮችን ማግኘትና የገበያ መገናኛ መረጃ ላይ እረዳለሁ።',
+    signIn: 'እባክዎ የMEA BOKO መለያዎ ውስጥ ይግቡ።', failed: 'AI ረዳቱ አሁን ዝግጁ አይደለም።', thinking: 'በማሰብ ላይ…'
   },
   om: {
     title: 'Gargaaraa Gabaa MEA BOKO',
@@ -41,36 +46,47 @@ const copy = {
       'Marketplace baniitii barbaacha fi calaltuu fayyadamuun tarree bunaa mirkanaa’e gosa oomishaa, gabaa fi maddaatiin ilaali.',
       'Gargaarsaaf odeeffannoo quunnamtii marsariitii MEA BOKO irratti maxxanfame fayyadami ykn unka gaaffii gabaa irraa ergaa ergi.'
     ],
-    fallback: 'Galmee dhiyeessaa, tarree bunaa barbaaduu fi odeeffannoo quunnamtii gabaa irratti si gargaaruu nan danda’a. Gaaffii herrega dhuunfaatiif garee MEA BOKO qunnami.'
+    fallback: 'Galmee dhiyeessaa, tarree bunaa fi quunnamtii gabaa irratti si gargaaruu nan danda’a.',
+    signIn: 'Maaloo jalqaba gara herrega MEA BOKO seeni.', failed: 'Gargaaraan AI amma qophaa’aa miti.', thinking: 'Yaadaa jira…'
   }
 };
 
-function getAnswer(message, language) {
-  const text = message.toLowerCase();
-  const index = /supplier|sell|apply|dhiyeess|gurgur|አቅራቢ|ሽያጭ/.test(text) ? 0
-    : /coffee|find|buy|marketplace|buna|bit|ቡና|ግዢ/.test(text) ? 1
-    : /contact|phone|team|qunn|አገኛለሁ|መገናኛ/.test(text) ? 2 : -1;
-  return index < 0 ? copy[language].fallback : copy[language].answers[index];
-}
 
 export default function MarketAssistant() {
   const [language, setLanguage] = useState('en');
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const t = useMemo(() => copy[language], [language]);
 
-  function send(value = draft) {
+  async function send(value = draft) {
     const question = value.trim();
-    if (!question) return;
-    setMessages((items) => [...items, { from: 'user', text: question }, { from: 'assistant', text: getAnswer(question, language) }]);
+    if (!question || busy) return;
     setDraft('');
+    setMessages((items) => [...items, { from: 'user', text: question }]);
+    setBusy(true);
+    try {
+      if (!supabase) throw new Error('SUPABASE_NOT_CONFIGURED');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setMessages((items) => [...items, { from: 'assistant', text: t.signIn }]);
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke('mea-boko-ai', { body: { message: question, language } });
+      if (error) throw error;
+      setMessages((items) => [...items, { from: 'assistant', text: data?.answer || t.failed }]);
+    } catch (_error) {
+      setMessages((items) => [...items, { from: 'assistant', text: t.failed }]);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <aside className="market-assistant" aria-label="MEA BOKO market assistant">
       {open && <section className="assistant-window">
-        <header className="assistant-header"><div><b>{t.title}</b><small>{t.subtitle} · Help preview</small></div><button type="button" onClick={() => setOpen(false)} aria-label="Close assistant">×</button></header>
+        <header className="assistant-header"><div><b>{t.title}</b><small>{t.subtitle} · AI support</small></div><button type="button" onClick={() => setOpen(false)} aria-label="Close assistant">×</button></header>
         <label className="assistant-language">Language
           <select value={language} onChange={(event) => { setLanguage(event.target.value); setMessages([]); }}>
             <option value="en">English</option><option value="am">አማርኛ</option><option value="om">Afaan Oromo</option>
@@ -83,9 +99,9 @@ export default function MarketAssistant() {
         {messages.length === 0 && <div className="assistant-prompts">{t.prompts.map((prompt) => <button type="button" key={prompt} onClick={() => send(prompt)}>{prompt}</button>)}</div>}
         <form className="assistant-input" onSubmit={(event) => { event.preventDefault(); send(); }}>
           <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t.placeholder} aria-label={t.placeholder}/>
-          <button type="submit">{t.send}</button>
+          <button type="submit" disabled={busy}>{busy ? t.thinking : t.send}</button>
         </form>
-        <p className="assistant-disclaimer">Automated help preview. Not connected to a live AI service yet.</p>
+        <p className="assistant-disclaimer">AI replies may be imperfect. Do not share passwords, payment details or private documents.</p>
       </section>}
       <button type="button" className="assistant-launcher" onClick={() => setOpen((value) => !value)} aria-expanded={open}>✦ <span>MEA BOKO AI</span></button>
     </aside>
