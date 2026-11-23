@@ -222,7 +222,7 @@ export default function App() {
       {isTelegramApp && <div className="announcement" role="status">TELEGRAM MINI APP · MEA BOKO MARKETPLACE</div>}
       <header className="topbar">
         <a className="brand" href="#home" aria-label="MEA BOKO home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a>
-        <nav><a href="#marketplace">Marketplace</a><a href="#origins">Origins</a><a href="#suppliers">For suppliers</a></nav>
+        <nav><a href="#about">About us</a><a href="#marketplace">Marketplace</a><a href="#origins">Origins</a><a href="#suppliers">For suppliers</a></nav>
         <a className="nav-cta" href="#suppliers">Join the market <span>↗</span></a>
       </header>
 
@@ -230,9 +230,9 @@ export default function App() {
         <div className="hero-copy">
           <p className="eyebrow">FROM ETHIOPIA, TO THE WORLD</p>
           <h1>Great coffee.<br /><em>Closer connections.</em></h1>
-          <p className="hero-intro">Discover Ethiopian green beans, roasted coffee and trusted trade connections — from coffee-growing communities to buyers around the world.</p>
+          <p className="hero-intro">MEA BOKO connects Ethiopian coffee farmers, producers, suppliers, brokers, exporters and buyers — serving domestic trade and international markets across Ethiopia’s diverse coffee-growing regions.</p>
           <div className="hero-actions"><a className="button button-gold" href="#marketplace">Explore coffee <span>↓</span></a><a className="text-link" href="#suppliers">Become a supplier <span>↗</span></a></div>
-          <div className="hero-proof"><span>GUJI</span><i /> <span>SIDAMA</span><i /> <span>YIRGACHEFFE</span></div>
+          <div className="hero-proof"><span>OROMIA</span><i /> <span>SIDAMA</span><i /> <span>GEDEO</span><i /> <span>AND MORE</span></div>
         </div>
         <div className="hero-art" aria-label="Ethiopian coffee beans and coffee leaves">
           <div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" />
@@ -247,6 +247,21 @@ export default function App() {
         <div><strong>02</strong><span>Domestic<br />& export market</span></div>
         <div><strong>03</strong><span>Origin-led<br />coffee discovery</span></div>
         <div><strong>04</strong><span>Direct trade<br />connections</span></div>
+      </section>
+
+      <section className="about-section section-wrap" id="about">
+        <div className="section-head"><div><p className="eyebrow">WHO WE ARE</p><h2>One Ethiopian coffee marketplace. Many origins.</h2><p>MEA BOKO Coffee Ethiopia is a marketplace and trade-connection platform built to connect coffee-growing communities with buyers in Ethiopia and around the world.</p></div></div>
+        <div className="about-copy">
+          <p>We support coffee discovery, sourcing, buying and selling, supplier connections, brokering and commercial intermediation. Our aim is to make it easier for farmers, cooperatives, suppliers, exporters, roasters and buyers to find one another and discuss trade opportunities.</p>
+          <p>Our sourcing network is open to coffee-producing areas across Ethiopia, including Oromia, Sidama, South Ethiopia, Southwest Ethiopia Peoples’ Region and other producing regions. Specific coffee origins and lots are identified by their actual production area, processing method, grade and available documentation.</p>
+          <div className="about-region-grid">
+            <article><b>OROMIA</b><span>Guji, Jimma, Limu, Illubabor and other producing areas</span></article>
+            <article><b>SIDAMA</b><span>Sidama coffee-growing communities and washing stations</span></article>
+            <article><b>SOUTH ETHIOPIA</b><span>Gedeo, including Yirgacheffe and nearby coffee areas</span></article>
+            <article><b>SOUTHWEST & OTHER REGIONS</b><span>Kaffa, Bench Sheko and other Ethiopian coffee-producing areas</span></article>
+          </div>
+          <p className="about-note">Region names describe broad sourcing coverage. Availability, origin, grade, process, quantity and export readiness are confirmed for each individual coffee listing.</p>
+        </div>
       </section>
 
       <section className="marketplace section-wrap" id="marketplace">
@@ -280,7 +295,7 @@ export default function App() {
       <AdminPanel />
 
       <section className="supplier-section" id="suppliers">
-        <div className="supplier-copy"><p className="eyebrow">GROW WITH MEA BOKO</p><h2>Bring your coffee<br />to a wider market.</h2><p>Are you a producer, supplier, exporter, roaster or coffee business? Apply to connect with domestic and international buyers.</p><div className="supplier-points"><span>✓ Domestic & export interest</span><span>✓ Green and roasted coffee</span><span>✓ Ethiopian coffee origins</span></div></div>
+        <div className="supplier-copy"><p className="eyebrow">GROW WITH MEA BOKO</p><h2>Bring your coffee<br />to a wider market.</h2><p>Are you a farmer, producer, cooperative, supplier, broker, exporter, roaster or coffee business in any Ethiopian coffee-producing region? Apply to connect with domestic and international buyers.</p><div className="supplier-points"><span>✓ Domestic & export interest</span><span>✓ Green and roasted coffee</span><span>✓ Ethiopian coffee origins</span></div></div>
         <form className="supplier-form" onSubmit={submitSupplier}>
           <h3>Supplier registration</h3><p>Send your business details for review.</p>
           {supplierSent ? <div className="success-panel"><span>✓</span><b>Application received</b><p>Thank you. Your supplier application has been submitted for review.</p><button type="button" className="text-link" onClick={() => setSupplierSent(false)}>Submit another application</button></div> : !isSupabaseConfigured ? <div className="notice">Connect the Supabase project to submit an application.</div> : <>
@@ -295,7 +310,7 @@ export default function App() {
 
       <MarketAssistant />
 
-      <footer className="footer"><a className="brand footer-brand" href="#home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a><p>Connecting Ethiopian coffee with the world.</p><span>© {new Date().getFullYear()} MEA BOKO</span></footer>
+      <footer className="footer"><a className="brand footer-brand" href="#home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a><p>Connecting coffee farmers, suppliers and buyers across Oromia, Sidama, Gedeo and coffee-producing regions throughout Ethiopia.</p><span>© {new Date().getFullYear()} MEA BOKO</span></footer>
 
       {selectedListing && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedListing(null); }}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-title"><button className="modal-close" onClick={() => setSelectedListing(null)} aria-label="Close">×</button>{orderSent ? <div className="success-panel"><span>✓</span><h2>Order request received</h2><p>{orderMessage}</p><button className="button button-dark" onClick={() => setSelectedListing(null)}>Close</button></div> : inquirySent ? <div className="success-panel"><span>✓</span><h2>Inquiry sent</h2><p>{inquiryMessage}</p><button className="button button-dark" onClick={() => setSelectedListing(null)}>Close</button></div> : <><p className="eyebrow">CONNECT WITH THE MARKET</p><h2 id="inquiry-title">{modalMode === 'order' ? 'Request ' + selectedListing.name : 'Ask about ' + selectedListing.name}</h2><p className="modal-subtitle">{selectedListing.origins?.name || 'Ethiopia'} · {money(selectedListing.price, selectedListing.currency)}</p>{error && <div className="notice error-notice">{error}</div>}{!isSupabaseConfigured ? <div className="notice">Connect Supabase to continue.</div> : modalMode === 'order' ? <form onSubmit={submitOrder}><p className="modal-subtitle">Sign in first. Your request will be sent to the MEA BOKO team; payment is not collected here.</p><label>Requested quantity (kg)<input name="quantity_kg" type="number" min="0.01" step="0.01" max={selectedListing.available_quantity_kg ?? undefined} required placeholder="Enter requested kilograms" /></label>{selectedListing.available_quantity_kg !== null && <p className="account-hint">Currently available: {Number(selectedListing.available_quantity_kg).toLocaleString()} kg. Stock is reserved only after the price proposal is accepted.</p>}<label>Currency<select name="currency" defaultValue={selectedListing.currency || 'ETB'}><option value="ETB">ETB</option><option value="USD">USD</option></select></label><button className="button button-dark form-submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit order request'} <span>↗</span></button></form> : <form onSubmit={submitInquiry}><label>Your name<input name="name" required placeholder="Full name" /></label><label>Email address<input name="email" type="email" required placeholder="name@example.com" /></label><label>Phone / WhatsApp<input name="phone" placeholder="+251…" /></label><label>Your message<textarea name="message" rows="4" required placeholder="Tell us what quantity you are interested in and your destination market…" /></label><button className="button button-dark form-submit" disabled={busy}>{busy ? 'Sending…' : 'Send inquiry'} <span>↗</span></button></form>}</>}</section></div>}
     </main>
