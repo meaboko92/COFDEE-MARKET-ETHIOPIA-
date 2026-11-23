@@ -13,6 +13,8 @@ export default function AccountPanel() {
   const [orders, setOrders] = useState([]);
   const [orderMessages, setOrderMessages] = useState([]);
   const [orderProposals, setOrderProposals] = useState([]);
+  const [orderShipments, setOrderShipments] = useState([]);
+  const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
@@ -53,9 +55,19 @@ export default function AccountPanel() {
         .in('order_id', participantOrders.map((order) => order.id))
         .order('created_at', { ascending: false });
       setOrderProposals(proposals || []);
+      const [{ data: shipments }, { data: confirmations }] = await Promise.all([
+        supabase.from('order_shipments').select('id,order_id,status,carrier,tracking_reference,dispatch_date,estimated_delivery_date,delivery_notes,created_at,updated_at')
+          .in('order_id', participantOrders.map((order) => order.id)),
+        supabase.from('order_delivery_confirmations').select('id,shipment_id,order_id,buyer_id,confirmed_at')
+          .in('order_id', participantOrders.map((order) => order.id)),
+      ]);
+      setOrderShipments(shipments || []);
+      setDeliveryConfirmations(confirmations || []);
     } else {
       setOrderMessages([]);
       setOrderProposals([]);
+      setOrderShipments([]);
+      setDeliveryConfirmations([]);
     }
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
@@ -74,7 +86,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -111,7 +123,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setOrders([]); setOrderMessages([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -192,6 +204,45 @@ export default function AccountPanel() {
     setOrderProposals(refreshedProposals || []);
   }
 
+  async function saveShipment(orderId, event) {
+    event.preventDefault();
+    if (!user || !supabase) return;
+    const form = new FormData(event.currentTarget);
+    const existing = orderShipments.find((shipment) => shipment.order_id === orderId);
+    const payload = {
+      status: String(form.get('status') || 'preparing'),
+      carrier: String(form.get('carrier') || '').trim() || null,
+      tracking_reference: String(form.get('tracking_reference') || '').trim() || null,
+      dispatch_date: String(form.get('dispatch_date') || '') || null,
+      estimated_delivery_date: String(form.get('estimated_delivery_date') || '') || null,
+      delivery_notes: String(form.get('delivery_notes') || '').trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    setMessageBusy((current) => ({ ...current, [orderId]: true }));
+    setError('');
+    const result = existing
+      ? await supabase.from('order_shipments').update(payload).eq('id', existing.id)
+      : await supabase.from('order_shipments').insert({ ...payload, order_id: orderId, status: 'preparing' });
+    setMessageBusy((current) => ({ ...current, [orderId]: false }));
+    if (result.error) { setError(result.error.message); return; }
+    setMessage('Delivery tracking information saved.');
+    await loadAccount(user);
+  }
+
+  async function confirmDelivery(shipment) {
+    if (!user || !supabase || shipment.status !== 'delivered') return;
+    setMessageBusy((current) => ({ ...current, [shipment.order_id]: true }));
+    setError('');
+    const order = orders.find((item) => item.id === shipment.order_id);
+    const { error: confirmError } = await supabase.from('order_delivery_confirmations').insert({
+      shipment_id: shipment.id, order_id: shipment.order_id, buyer_id: user.id,
+    });
+    setMessageBusy((current) => ({ ...current, [shipment.order_id]: false }));
+    if (confirmError) { setError(confirmError.code === '23505' ? 'Receipt has already been confirmed.' : confirmError.message); return; }
+    if (order) setMessage('Thank you. You confirmed receipt of your coffee order.');
+    await loadAccount(user);
+  }
+
   async function respondToPriceProposal(proposal, decision) {
     if (!user || !supabase || proposal.proposer_id === user.id || proposal.status !== 'pending') return;
     setMessageBusy((current) => ({ ...current, [proposal.order_id]: true }));
@@ -242,6 +293,8 @@ export default function AccountPanel() {
         {orders.length ? <div className="trade-order-list">{orders.map((item) => {
           const isBuyer = item.buyer_id === user.id;
           const thread = orderMessages.filter((message) => message.order_id === item.id);
+          const shipment = orderShipments.find((record) => record.order_id === item.id);
+          const receipt = deliveryConfirmations.find((record) => record.order_id === item.id);
           return <article className="trade-order-card" key={item.id}>
             <div className="trade-order-head"><div><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{isBuyer ? 'Buyer view' : 'Supplier view'} · {Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></div><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
             <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Earlier price note: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
@@ -249,6 +302,35 @@ export default function AccountPanel() {
               const isRecipient = proposal.proposer_id !== user.id;
               return <div className="price-proposal-card" key={proposal.id}><div><strong>{Number(proposal.amount).toLocaleString()} {proposal.currency} / kg</strong><small>{proposal.proposer_id === user.id ? 'Proposed by you' : 'Proposed by trade partner'} · {new Date(proposal.created_at).toLocaleString()}</small><span className={'listing-status status-'+proposal.status}>{proposal.status}</span></div>{proposal.status === 'pending' && isRecipient && <div className="admin-actions"><button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'accepted')}>Accept price</button><button type="button" className="admin-danger" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'declined')}>Decline</button></div>}</div>;
             }) : <p className="account-hint">No price proposals yet.</p>}</div>
+            {item.status === 'confirmed' && <section className="order-delivery-panel">
+              <div className="delivery-panel-heading"><b>Delivery tracking</b>{shipment && <span className={'listing-status status-'+shipment.status}>{shipment.status.replaceAll('_',' ')}</span>}</div>
+              {shipment ? <>
+                <div className="delivery-details">
+                  <p><strong>Carrier:</strong> {shipment.carrier || 'Not specified'}</p>
+                  <p><strong>Tracking reference:</strong> {shipment.tracking_reference || 'Not provided'}</p>
+                  <p><strong>Dispatch date:</strong> {shipment.dispatch_date || 'Not set'}</p>
+                  <p><strong>Estimated delivery:</strong> {shipment.estimated_delivery_date || 'Not set'}</p>
+                  {shipment.delivery_notes && <p><strong>Delivery notes:</strong> {shipment.delivery_notes}</p>}
+                </div>
+                {isBuyer && shipment.status === 'delivered' && !receipt && <button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => confirmDelivery(shipment)}>{messageBusy[item.id] ? 'Saving…' : 'Confirm receipt'}</button>}
+                {receipt && <p className="delivery-confirmed">Receipt confirmed by buyer on {new Date(receipt.confirmed_at).toLocaleString()}.</p>}
+                {isBuyer && shipment.status === 'delivered' && !receipt && <p className="account-hint">The supplier marked this shipment delivered. Please confirm only after you have received the coffee.</p>}
+                {!isBuyer && !receipt && <p className="account-hint">Buyer receipt confirmation is still pending.</p>}
+              </> : isBuyer ? <p className="account-hint">The supplier has not added tracking details yet.</p> : <form className="shipment-form" onSubmit={(event) => saveShipment(item.id,event)}>
+                <div className="form-row"><label>Delivery status<select name="status" defaultValue="preparing"><option value="preparing">Preparing</option><option value="dispatched">Dispatched</option><option value="in_transit">In transit</option><option value="delivered">Delivered</option></select></label><label>Carrier / logistics partner<input name="carrier" placeholder="Transport company" /></label></div>
+                <div className="form-row"><label>Tracking reference<input name="tracking_reference" maxLength="200" placeholder="Waybill / tracking ID" /></label><label>Dispatch date<input name="dispatch_date" type="date" /></label></div>
+                <label>Estimated delivery date<input name="estimated_delivery_date" type="date" /></label>
+                <label>Delivery notes<textarea name="delivery_notes" rows="2" maxLength="2000" placeholder="Transport, warehouse or delivery information…" /></label>
+                <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Saving…' : 'Save delivery details'}</button>
+              </form>}
+              {shipment && !isBuyer && !receipt && shipment.status !== 'delivered' && <form className="shipment-form shipment-update-form" onSubmit={(event) => saveShipment(item.id,event)}>
+                <div className="form-row"><label>Update status<select name="status" defaultValue={shipment.status}><option value="preparing">Preparing</option><option value="dispatched">Dispatched</option><option value="in_transit">In transit</option><option value="delivered">Delivered</option></select></label><label>Carrier<input name="carrier" defaultValue={shipment.carrier || ''} placeholder="Transport company" /></label></div>
+                <div className="form-row"><label>Tracking reference<input name="tracking_reference" defaultValue={shipment.tracking_reference || ''} maxLength="200" /></label><label>Dispatch date<input name="dispatch_date" type="date" defaultValue={shipment.dispatch_date || ''} /></label></div>
+                <label>Estimated delivery date<input name="estimated_delivery_date" type="date" defaultValue={shipment.estimated_delivery_date || ''} /></label>
+                <label>Delivery notes<textarea name="delivery_notes" rows="2" maxLength="2000" defaultValue={shipment.delivery_notes || ''} /></label>
+                <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Saving…' : 'Update delivery tracking'}</button>
+              </form>}
+            </section>}
             <form className="order-message-form" onSubmit={(event) => sendOrderMessage(item.id, event)}>
               <label>Message<textarea rows="2" maxLength="3000" value={messageDrafts[item.id] || ''} onChange={(event) => setMessageDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Discuss quality, delivery, documents or other order details…" /></label>
               <div className="form-row"><label>Propose price per kg ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim())}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
