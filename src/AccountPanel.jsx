@@ -22,6 +22,7 @@ export default function AccountPanel() {
   const [orderShipments, setOrderShipments] = useState([]);
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [tradeDocuments, setTradeDocuments] = useState([]);
+  const [paymentRecords, setPaymentRecords] = useState([]);
   const [exportDetails, setExportDetails] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
@@ -93,6 +94,10 @@ export default function AccountPanel() {
         .select('id,order_id,destination_country,destination_port,importer_company,buyer_reference,coffee_variety,grade,process,moisture_percent,crop_year,lot_reference,bag_count,bag_weight_kg,packaging,export_notes,updated_by,updated_at')
         .in('order_id', participantOrders.map((order) => order.id));
       setExportDetails(exportRows || []);
+      const { data: payments } = await supabase.from('order_payment_records')
+        .select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at')
+        .in('order_id', participantOrders.map((order) => order.id)).order('created_at', { ascending: false });
+      setPaymentRecords(payments || []);
     } else {
       setBuyerBusinessProfiles([]);
       setOrderMessages([]);
@@ -101,6 +106,7 @@ export default function AccountPanel() {
       setDeliveryConfirmations([]);
       setTradeDocuments([]);
       setExportDetails([]);
+      setPaymentRecords([]);
     }
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
@@ -119,7 +125,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -156,7 +162,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -264,6 +270,36 @@ export default function AccountPanel() {
     ]);
     setOrderMessages(refreshed || []);
     setOrderProposals(refreshedProposals || []);
+  }
+
+  async function submitPaymentRecord(order, event) {
+    event.preventDefault();
+    if (!user || !supabase || !['confirmed','fulfilled'].includes(order.status)) return;
+    const form = new FormData(event.currentTarget);
+    const amount = Number(form.get('amount'));
+    if (!Number.isFinite(amount) || amount <= 0) { setError('Enter a payment amount greater than zero.'); return; }
+    const payload = {
+      order_id: order.id,
+      submitted_by: user.id,
+      amount,
+      currency: order.currency,
+      payment_stage: String(form.get('payment_stage') || 'deposit'),
+      payment_method: String(form.get('payment_method') || 'bank_transfer'),
+      payment_reference: String(form.get('payment_reference') || '').trim() || null,
+      payment_date: String(form.get('payment_date') || '') || null,
+      notes: String(form.get('notes') || '').trim() || null,
+    };
+    setMessageBusy((current) => ({ ...current, [order.id]: true }));
+    setError('');
+    const { error: paymentError } = await supabase.from('order_payment_records').insert(payload);
+    setMessageBusy((current) => ({ ...current, [order.id]: false }));
+    if (paymentError) { setError(paymentError.message); return; }
+    event.currentTarget.reset();
+    const { data } = await supabase.from('order_payment_records')
+      .select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at')
+      .in('order_id', orders.map((item) => item.id)).order('created_at', { ascending: false });
+    setPaymentRecords(data || []);
+    setMessage('Payment record submitted for administrative review. This does not transfer money.');
   }
 
   async function saveExportDetails(order, event) {
@@ -516,6 +552,26 @@ export default function AccountPanel() {
               const isRecipient = proposal.proposer_id !== user.id;
               return <div className="price-proposal-card" key={proposal.id}><div><strong>{Number(proposal.amount).toLocaleString()} {proposal.currency} / kg</strong><small>{proposal.proposer_id === user.id ? 'Proposed by you' : 'Proposed by trade partner'} · {new Date(proposal.created_at).toLocaleString()}</small>{proposal.incoterm && <small><b>Delivery term:</b> {proposal.incoterm}{proposal.quote_valid_until ? ' · Valid until '+proposal.quote_valid_until : ''}</small>}{(proposal.freight_per_kg != null || proposal.insurance_per_kg != null || proposal.origin_charges_per_kg != null || proposal.destination_charges_per_kg != null) && <small>Extra per kg — Freight: {proposal.freight_per_kg ?? '—'} · Insurance: {proposal.insurance_per_kg ?? '—'} · Origin: {proposal.origin_charges_per_kg ?? '—'} · Destination: {proposal.destination_charges_per_kg ?? '—'} {proposal.currency}</small>}{proposal.quote_notes && <small>Quote notes: {proposal.quote_notes}</small>}<span className={'listing-status status-'+proposal.status}>{proposal.status}</span></div>{proposal.status === 'pending' && isRecipient && <div className="admin-actions"><button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'accepted')}>Accept price</button><button type="button" className="admin-danger" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'declined')}>Decline</button></div>}</div>;
             }) : <p className="account-hint">No price proposals yet.</p>}</div>
+            <section className="order-delivery-panel payment-record-panel">
+              <div className="delivery-panel-heading"><b>Payment records</b><span>{paymentRecords.filter((record) => record.order_id === item.id).length} entries</span></div>
+              <p className="account-hint">Record a payment made outside MEA BOKO. Submission is not proof of cleared funds; an administrator must review it.</p>
+              {paymentRecords.filter((record) => record.order_id === item.id).map((record) => (
+                <div className="delivery-details" key={record.id}>
+                  <p><strong>{Number(record.amount).toLocaleString()} {record.currency}</strong> · {record.payment_stage.replaceAll('_',' ')} · <span className={'listing-status status-'+record.status}>{record.status}</span></p>
+                  <p>{record.payment_method.replaceAll('_',' ')}{record.payment_date ? ' · '+record.payment_date : ''}{record.payment_reference ? ' · Ref: '+record.payment_reference : ''}</p>
+                  {record.notes && <p>{record.notes}</p>}
+                  {record.review_note && <p>Review note: {record.review_note}</p>}
+                  <small>Submitted {new Date(record.created_at).toLocaleString()}</small>
+                </div>
+              ))}
+              {['confirmed','fulfilled'].includes(item.status) && <form className="shipment-form" onSubmit={(event) => submitPaymentRecord(item,event)}>
+                <div className="form-row"><label>Amount ({item.currency})<input name="amount" type="number" min="0.01" step="0.01" required placeholder="Payment amount" /></label><label>Payment stage<select name="payment_stage"><option value="deposit">Deposit</option><option value="balance">Balance</option><option value="full_payment">Full payment</option><option value="other">Other</option></select></label></div>
+                <div className="form-row"><label>Method<select name="payment_method"><option value="bank_transfer">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></select></label><label>Payment date<input name="payment_date" type="date" /></label></div>
+                <label>Payment reference (optional)<input name="payment_reference" maxLength="180" placeholder="Reference from your provider" /></label>
+                <label>Notes (optional)<textarea name="notes" rows="2" maxLength="1200" placeholder="Additional information for the reviewer" /></label>
+                <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Submitting…' : 'Submit payment record'}</button>
+              </form>}
+            </section>
             {item.status === 'confirmed' && <section className="order-delivery-panel">
               <div className="delivery-panel-heading"><b>Delivery tracking</b>{shipment && <span className={'listing-status status-'+shipment.status}>{shipment.status.replaceAll('_',' ')}</span>}</div>
               {shipment ? <>
