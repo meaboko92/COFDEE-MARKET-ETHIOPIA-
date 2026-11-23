@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import AccountPanel from './AccountPanel';
 import AdminPanel from './AdminPanel';
+import MarketAssistant from './MarketAssistant';
 
 const productLabels = {
   green_beans: 'Green coffee beans',
@@ -291,6 +292,8 @@ export default function App() {
           </>}
         </form>
       </section>
+
+      <MarketAssistant />
 
       <footer className="footer"><a className="brand footer-brand" href="#home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a><p>Connecting Ethiopian coffee with the world.</p><span>© {new Date().getFullYear()} MEA BOKO</span></footer>
 
