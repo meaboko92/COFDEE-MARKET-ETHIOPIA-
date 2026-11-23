@@ -32,6 +32,19 @@ export default function App() {
   const [inquirySent, setInquirySent] = useState(false);
   const [supplierSent, setSupplierSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [isTelegramApp, setIsTelegramApp] = useState(false);
+
+  useEffect(() => {
+    const telegram = window.Telegram?.WebApp;
+    if (!telegram) return;
+    telegram.ready();
+    telegram.expand();
+    try {
+      telegram.setHeaderColor('#123b2a');
+      telegram.setBackgroundColor('#f7f5ef');
+    } catch { /* Older Telegram clients may not support these display settings. */ }
+    setIsTelegramApp(true);
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -173,6 +186,7 @@ export default function App() {
   return (
     <main className="site-shell">
       <div className="announcement">ETHIOPIAN COFFEE · DOMESTIC & INTERNATIONAL MARKET</div>
+      {isTelegramApp && <div className="announcement" role="status">TELEGRAM MINI APP · MEA BOKO MARKETPLACE</div>}
       <header className="topbar">
         <a className="brand" href="#home" aria-label="MEA BOKO home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a>
         <nav><a href="#marketplace">Marketplace</a><a href="#origins">Origins</a><a href="#suppliers">For suppliers</a></nav>
