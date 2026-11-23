@@ -25,6 +25,9 @@ export default function App() {
   const [dbMessage, setDbMessage] = useState(isSupabaseConfigured ? 'Connecting to the coffee market…' : 'Database setup required');
   const [error, setError] = useState('');
   const [selectedListing, setSelectedListing] = useState(null);
+  const [modalMode, setModalMode] = useState('inquiry');
+  const [orderSent, setOrderSent] = useState(false);
+  const [orderMessage, setOrderMessage] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
   const [supplierSent, setSupplierSent] = useState(false);
@@ -96,6 +99,41 @@ export default function App() {
     }
     setInquirySent(true);
     setInquiryMessage('Your inquiry has been submitted. The MEA BOKO team can follow up using the contact details you provided.');
+    formElement.reset();
+  }
+
+  async function submitOrder(event) {
+    event.preventDefault();
+    if (!supabase || !selectedListing) return;
+    setBusy(true);
+    setError('');
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      setBusy(false);
+      setError('Please sign in to your MEA BOKO account before requesting an order.');
+      return;
+    }
+    const quantity = Number(form.get('quantity_kg'));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setBusy(false);
+      setError('Enter a quantity greater than zero.');
+      return;
+    }
+    const { error: orderError } = await supabase.from('orders').insert({
+      buyer_id: user.id,
+      listing_id: selectedListing.id,
+      quantity_kg: quantity,
+      currency: String(form.get('currency') || 'ETB'),
+    });
+    setBusy(false);
+    if (orderError) {
+      setError(orderError.message);
+      return;
+    }
+    setOrderSent(true);
+    setOrderMessage('Your order request has been sent to MEA BOKO for follow-up. No payment has been taken.');
     formElement.reset();
   }
 
@@ -175,7 +213,7 @@ export default function App() {
           <div className="product-grid">{filteredListings.map((item) => (
             <article className="product-card" key={item.id}>
               <div className="product-visual"><span className="product-chip">{productLabels[item.product_type] || item.product_type}</span><div className="product-bean">✦</div><span className="product-origin">{item.origins?.name || 'Ethiopia'}</span></div>
-              <div className="product-info"><div className="product-meta"><span>{item.origins?.region || 'Ethiopia'}</span><span>{item.market === 'both' ? 'Domestic + Export' : item.market}</span></div><h3>{item.name}</h3><p>{[item.process, item.grade].filter(Boolean).join(' · ') || 'Ethiopian coffee'}</p>{item.tasting_notes && <p className="tasting-notes">{item.tasting_notes}</p>}<div className="product-bottom"><div><strong>{money(item.price, item.currency)}</strong>{item.quantity_kg !== null && <small>{Number(item.quantity_kg).toLocaleString()} kg available</small>}</div><button className="button button-dark" onClick={() => { setSelectedListing(item); setInquirySent(false); setInquiryMessage(''); }}>Inquire <span>↗</span></button></div></div>
+              <div className="product-info"><div className="product-meta"><span>{item.origins?.region || 'Ethiopia'}</span><span>{item.market === 'both' ? 'Domestic + Export' : item.market}</span></div><h3>{item.name}</h3><p>{[item.process, item.grade].filter(Boolean).join(' · ') || 'Ethiopian coffee'}</p>{item.tasting_notes && <p className="tasting-notes">{item.tasting_notes}</p>}<div className="product-bottom"><div><strong>{money(item.price, item.currency)}</strong>{item.quantity_kg !== null && <small>{Number(item.quantity_kg).toLocaleString()} kg available</small>}</div><div className="product-actions"><button className="button button-dark" onClick={() => { setSelectedListing(item); setModalMode('inquiry'); setInquirySent(false); setOrderSent(false); setInquiryMessage(''); setError(''); }}>Inquire <span>↗</span></button><button className="button button-gold" onClick={() => { setSelectedListing(item); setModalMode('order'); setOrderSent(false); setInquirySent(false); setError(''); }}>Request order <span>↗</span></button></div></div></div>
             </article>
           ))}</div>
         ) : <div className="empty-market"><span className="empty-icon">✳</span><h3>{listings.length ? 'No matching coffee found' : 'New coffee listings are coming soon'}</h3><p>{listings.length ? 'Try changing your search or filters.' : 'Approved supplier listings will appear here. Suppliers can apply to join the marketplace below.'}</p><a href="#suppliers" className="text-link">Become a supplier <span>↗</span></a></div>}
@@ -205,7 +243,7 @@ export default function App() {
 
       <footer className="footer"><a className="brand footer-brand" href="#home"><span className="brand-mark">MB</span><span><b>MEA BOKO</b><small>COFFEE ETHIOPIA</small></span></a><p>Connecting Ethiopian coffee with the world.</p><span>© {new Date().getFullYear()} MEA BOKO</span></footer>
 
-      {selectedListing && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedListing(null); }}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-title"><button className="modal-close" onClick={() => setSelectedListing(null)} aria-label="Close">×</button>{inquirySent ? <div className="success-panel"><span>✓</span><h2>Inquiry sent</h2><p>{inquiryMessage}</p><button className="button button-dark" onClick={() => setSelectedListing(null)}>Close</button></div> : <><p className="eyebrow">CONNECT WITH THE MARKET</p><h2 id="inquiry-title">Ask about {selectedListing.name}</h2><p className="modal-subtitle">{selectedListing.origins?.name || 'Ethiopia'} · {money(selectedListing.price, selectedListing.currency)}</p>{!isSupabaseConfigured ? <div className="notice">Connect Supabase to send an inquiry.</div> : <form onSubmit={submitInquiry}><label>Your name<input name="name" required placeholder="Full name" /></label><label>Email address<input name="email" type="email" required placeholder="name@example.com" /></label><label>Phone / WhatsApp<input name="phone" placeholder="+251…" /></label><label>Your message<textarea name="message" rows="4" required placeholder="Tell us what quantity you are interested in and your destination market…" /></label><button className="button button-dark form-submit" disabled={busy}>{busy ? 'Sending…' : 'Send inquiry'} <span>↗</span></button></form>}</>}</section></div>}
+      {selectedListing && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedListing(null); }}><section className="inquiry-modal" role="dialog" aria-modal="true" aria-labelledby="inquiry-title"><button className="modal-close" onClick={() => setSelectedListing(null)} aria-label="Close">×</button>{orderSent ? <div className="success-panel"><span>✓</span><h2>Order request received</h2><p>{orderMessage}</p><button className="button button-dark" onClick={() => setSelectedListing(null)}>Close</button></div> : inquirySent ? <div className="success-panel"><span>✓</span><h2>Inquiry sent</h2><p>{inquiryMessage}</p><button className="button button-dark" onClick={() => setSelectedListing(null)}>Close</button></div> : <><p className="eyebrow">CONNECT WITH THE MARKET</p><h2 id="inquiry-title">{modalMode === 'order' ? 'Request ' + selectedListing.name : 'Ask about ' + selectedListing.name}</h2><p className="modal-subtitle">{selectedListing.origins?.name || 'Ethiopia'} · {money(selectedListing.price, selectedListing.currency)}</p>{error && <div className="notice error-notice">{error}</div>}{!isSupabaseConfigured ? <div className="notice">Connect Supabase to continue.</div> : modalMode === 'order' ? <form onSubmit={submitOrder}><p className="modal-subtitle">Sign in first. Your request will be sent to the MEA BOKO team; payment is not collected here.</p><label>Requested quantity (kg)<input name="quantity_kg" type="number" min="0.01" step="0.01" required placeholder="For example, 500" /></label><label>Currency<select name="currency" defaultValue={selectedListing.currency || 'ETB'}><option value="ETB">ETB</option><option value="USD">USD</option></select></label><button className="button button-dark form-submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit order request'} <span>↗</span></button></form> : <form onSubmit={submitInquiry}><label>Your name<input name="name" required placeholder="Full name" /></label><label>Email address<input name="email" type="email" required placeholder="name@example.com" /></label><label>Phone / WhatsApp<input name="phone" placeholder="+251…" /></label><label>Your message<textarea name="message" rows="4" required placeholder="Tell us what quantity you are interested in and your destination market…" /></label><button className="button button-dark form-submit" disabled={busy}>{busy ? 'Sending…' : 'Send inquiry'} <span>↗</span></button></form>}</>}</section></div>}
     </main>
   );
 }
