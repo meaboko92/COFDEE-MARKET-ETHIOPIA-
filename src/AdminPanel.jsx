@@ -34,7 +34,7 @@ export default function AdminPanel() {
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,review_note,reviewed_by,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
-        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,status,created_at,origins(name,region)')
+        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,status,created_at,photo_url,origins(name,region)')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
@@ -415,7 +415,7 @@ export default function AdminPanel() {
     <div className="admin-block">
       <div className="admin-block-head"><h3>Coffee listing moderation</h3><span>{pendingListings.length} to review</span></div>
       {listings.length ? listings.map((item) => <article className="admin-record" key={item.id}>
-        <div className="admin-record-main"><div><h4>{item.name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p>{item.origins?.name || 'Ethiopia'} · {item.product_type.replaceAll('_',' ')} · {item.market}</p><p>{item.process || 'Process not specified'} · {item.grade || 'Grade not specified'}</p><p>{item.quantity_kg ?? 'Quantity not specified'} kg · {item.price ?? 'Price on request'} {item.currency}</p><small>{new Date(item.created_at).toLocaleString()}</small></div>
+        <div className="admin-record-main">{item.photo_url && <img className="admin-coffee-photo" src={item.photo_url} alt={item.name + " product"} loading="lazy" />}<div><h4>{item.name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p>{item.origins?.name || 'Ethiopia'} · {item.product_type.replaceAll('_',' ')} · {item.market}</p><p>{item.process || 'Process not specified'} · {item.grade || 'Grade not specified'}</p><p>{item.quantity_kg ?? 'Quantity not specified'} kg · {item.price ?? 'Price on request'} {item.currency}</p><small>{new Date(item.created_at).toLocaleString()}</small></div>
         <div className="admin-actions">{item.status !== 'approved' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('coffee_listings',item.id,'approved')}>Approve listing</button>}{item.status !== 'rejected' && <button className="admin-danger" disabled={busyId===item.id} onClick={() => changeStatus('coffee_listings',item.id,'rejected')}>Reject</button>}{item.status === 'approved' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('coffee_listings',item.id,'sold_out')}>Mark sold out</button>}</div>
       </article>) : <p className="admin-empty">No coffee listings submitted yet.</p>}
     </div>
