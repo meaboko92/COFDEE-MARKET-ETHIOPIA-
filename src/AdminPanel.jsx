@@ -26,7 +26,7 @@ export default function AdminPanel() {
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
-        .select('id,name,product_type,market,process,grade,quantity_kg,price,currency,status,created_at,origins(name,region)')
+        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,price,currency,status,created_at,origins(name,region)')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
@@ -182,6 +182,34 @@ export default function AdminPanel() {
     return { currency, orderValue, verifiedPayments, pendingPayments, outstanding: Math.max(0, orderValue - verifiedPayments), pricedOrderCount, orderCount: currencyOrders.length };
   });
 
+  const supplierPerformance = applications.map((supplier) => {
+    const supplierListings = listings.filter((listing) => listing.supplier_id === supplier.user_id);
+    const listingIds = new Set(supplierListings.map((listing) => listing.id));
+    const supplierOrders = orders.filter((order) => listingIds.has(order.listing_id));
+    const confirmedOrders = supplierOrders.filter((order) => ['confirmed','fulfilled'].includes(order.status));
+    const quantitySold = confirmedOrders.reduce((sum, order) => sum + Number(order.quantity_kg || 0), 0);
+    const orderValueByCurrency = ['ETB','USD','EUR'].map((currency) => ({
+      currency,
+      value: confirmedOrders.filter((order) => order.currency === currency && order.agreed_price != null)
+        .reduce((sum, order) => sum + Number(order.quantity_kg || 0) * Number(order.agreed_price || 0), 0),
+    })).filter((item) => item.value > 0);
+    const approvedInventoryKg = supplierListings.filter((listing) => listing.status === 'approved')
+      .reduce((sum, listing) => sum + Number(listing.quantity_kg || 0), 0);
+    return { ...supplier, supplierListings, supplierOrders, confirmedOrders, quantitySold, orderValueByCurrency, approvedInventoryKg };
+  }).filter((supplier) => supplier.supplierListings.length || supplier.supplierOrders.length);
+  const inventorySummary = ['approved','pending','sold_out','rejected'].map((status) => ({
+    status,
+    count: listings.filter((listing) => listing.status === status).length,
+    quantity: listings.filter((listing) => listing.status === status).reduce((sum, listing) => sum + Number(listing.quantity_kg || 0), 0),
+  }));
+  const salesSummary = ['ETB','USD','EUR'].map((currency) => ({
+    currency,
+    quantity: orders.filter((order) => ['confirmed','fulfilled'].includes(order.status) && order.currency === currency)
+      .reduce((sum, order) => sum + Number(order.quantity_kg || 0), 0),
+    value: orders.filter((order) => ['confirmed','fulfilled'].includes(order.status) && order.currency === currency && order.agreed_price != null)
+      .reduce((sum, order) => sum + Number(order.quantity_kg || 0) * Number(order.agreed_price || 0), 0),
+  })).filter((item) => item.quantity || item.value);
+
   return <section className="admin-section" id="admin">
     <div className="admin-heading"><div><p className="eyebrow">PRIVATE MANAGEMENT</p><h2>MEA BOKO Admin Dashboard</h2><p>Review supplier applications, moderate coffee listings and follow buyer inquiries.</p></div><button className="button button-dark" onClick={loadDashboard}>Refresh dashboard ↻</button></div>
     {error && <div className="notice error-notice">{error}</div>}
@@ -191,6 +219,26 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Supplier performance & coffee inventory</h3><span>{supplierPerformance.length} suppliers with marketplace activity</span></div>
+      <div className="export-report-stats">
+        {inventorySummary.map((item) => <div key={item.status}><b>{item.count}</b><small>{item.status.replace('_',' ')} listings · {item.quantity.toLocaleString()} kg listed</small></div>)}
+      </div>
+      <h4>Confirmed trade activity</h4>
+      <div className="export-report-stats">
+        {salesSummary.map((item) => <div key={item.currency}><b>{item.quantity.toLocaleString()} kg</b><small>{item.currency} {item.value.toLocaleString(undefined,{maximumFractionDigits:2})} agreed value</small></div>)}
+      </div>
+      {supplierPerformance.length ? supplierPerformance.map((supplier) => <article className="admin-record" key={supplier.user_id}>
+        <div className="admin-record-main">
+          <div><h4>{supplier.business_name}</h4><span className={'listing-status status-'+supplier.status}>{supplier.status.replace('_',' ')}</span></div>
+          <p>{supplier.contact_person} · {supplier.business_role}</p>
+          <p>{supplier.supplierListings.length} listings · {supplier.approvedInventoryKg.toLocaleString()} kg in approved listings</p>
+          <p>{supplier.supplierOrders.length} orders · {supplier.confirmedOrders.length} confirmed/fulfilled · {supplier.quantitySold.toLocaleString()} kg ordered in confirmed/fulfilled trades</p>
+          {supplier.orderValueByCurrency.length > 0 && <p>Agreed order value: {supplier.orderValueByCurrency.map((item) => item.currency+' '+item.value.toLocaleString(undefined,{maximumFractionDigits:2})).join(' · ')}</p>}
+        </div>
+      </article>) : <p className="admin-empty">Supplier performance will appear when suppliers have active listings or orders.</p>}
+      <p className="account-hint">Inventory is the quantity entered on approved listings; it is not automatically reduced when orders are placed. Sales figures include confirmed and fulfilled orders only, and are based on agreed prices where available. Dashboard data is limited to the latest 100 listings, 100 supplier applications and 100 orders.</p>
     </div>
     <div className="admin-block financial-report-block">
       <div className="admin-block-head"><h3>Financial reports & trade accounting</h3><button className="button button-dark" type="button" onClick={downloadFinancialReport}>Export CSV report ↓</button></div>
