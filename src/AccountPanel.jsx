@@ -49,7 +49,7 @@ export default function AccountPanel() {
       .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').limit(1).maybeSingle();
     setApproved(Boolean(application));
     const { data: ownListings } = await supabase.from('coffee_listings')
-      .select('id,name,product_type,market,status,quantity_kg,price,currency,created_at')
+      .select('id,name,product_type,market,status,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
     setListings(ownListings || []);
     const orderSelect = 'id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings!inner(name,supplier_id,market)';
@@ -666,7 +666,7 @@ export default function AccountPanel() {
           </article>;
         })}</div> : <p className="account-hint">You have no buyer or supplier trade orders yet.</p>}
         <h3 className="account-subhead">Your coffee listings</h3>
-        {listings.length ? <div className="own-listings">{listings.map((item) => <div key={item.id}><span><b>{item.name}</b><small>{item.product_type.replaceAll('_',' ')} · {item.market}</small></span><span className={'listing-status status-'+item.status}>{item.status}</span></div>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
+        {listings.length ? <div className="own-listings">{listings.map((item) => <div key={item.id}><span><b>{item.name}</b><small>{item.product_type.replaceAll('_',' ')} · {item.market} · {item.available_quantity_kg == null ? 'Stock quantity not set' : Number(item.available_quantity_kg).toLocaleString()+' kg available'} · {Number(item.reserved_quantity_kg || 0).toLocaleString()} kg reserved</small></span><span className={'listing-status status-'+item.status}>{item.status}</span></div>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
       </>}
     </div>
   </section>;
