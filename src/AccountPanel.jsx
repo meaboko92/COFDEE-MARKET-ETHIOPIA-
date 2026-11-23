@@ -452,7 +452,7 @@ export default function AccountPanel() {
         {role === 'buyer' && <section className="buyer-business-panel">
           <h3 className="account-subhead">International buyer profile</h3>
           <p className="account-hint">Add your company and destination details so suppliers can understand your business when you place an order. This information is shared with a supplier only when you have an order with that supplier.</p>
-          <form className="account-form" onSubmit={saveBuyerBusiness}>
+          <form className="account-form" key={JSON.stringify(buyerBusiness)} onSubmit={saveBuyerBusiness}>
             <label>Company name<input name="company_name" maxLength="160" defaultValue={buyerBusiness.company_name} placeholder="Company / trading name" /></label>
             <div className="form-row">
               <label>Business type<select name="business_type" defaultValue={buyerBusiness.business_type}><option value="importer">Coffee importer</option><option value="roaster">Coffee roaster</option><option value="wholesaler">Wholesaler</option><option value="retailer">Retailer</option><option value="cafe">Cafe</option><option value="other">Other</option></select></label>
