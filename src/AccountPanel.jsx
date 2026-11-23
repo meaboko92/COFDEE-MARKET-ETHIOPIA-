@@ -133,7 +133,7 @@ export default function AccountPanel() {
       .select('id,event_type,title,body,entity_id,created_at,read_at')
       .eq('user_id', currentUser.id).order('created_at', { ascending: false }).limit(30);
     setNotifications(notificationRows || []);
-    const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
+    const { data: originRows } = await supabase.from('origins').select('id,name,region,origin_level,parent_id,sort_order').eq('is_active', true).order('sort_order').order('name');
     setOrigins(originRows || []);
   }, []);
 
@@ -659,7 +659,7 @@ export default function AccountPanel() {
           <form onSubmit={addListing} className="account-form">
             <label>Product name<input name="name" required placeholder="e.g. Guji Hambela Washed Grade 1" /></label>
             <div className="form-row"><label>Coffee type<select name="product_type" required defaultValue="green_beans"><option value="green_beans">Green coffee beans</option><option value="roasted_beans">Roasted coffee</option><option value="ground_coffee">Ground coffee</option></select></label><label>Market<select name="market" required defaultValue="both"><option value="domestic">Domestic</option><option value="export">International export</option><option value="both">Both markets</option></select></label></div>
-            <div className="form-row"><label>Origin<select name="origin_id" defaultValue=""><option value="">Select origin</option>{origins.map((origin) => <option key={origin.id} value={origin.id}>{origin.name}{origin.region ? ' — '+origin.region : ''}</option>)}</select></label><label>Process<input name="process" placeholder="Washed / Natural / Honey" /></label></div>
+            <div className="form-row"><label>Origin<select name="origin_id" defaultValue=""><option value="">Select origin</option>{origins.filter((origin) => origin.origin_level === 'origin').map((origin) => <option key={origin.id} value={origin.id}>{[origins.find((parent) => parent.id === origin.parent_id)?.name, origin.name, origin.region].filter(Boolean).join(' — ')}</option>)}</select></label><label>Process<input name="process" placeholder="Washed / Natural / Honey" /></label></div>
             <div className="form-row"><label>Grade<input name="grade" placeholder="Grade 1 / Grade 2…" /></label><label>Quantity (kg)<input name="quantity_kg" type="number" min="0" step="0.01" placeholder="e.g. 500" /></label></div>
             <div className="form-row"><label>Price (optional)<input name="price" type="number" min="0" step="0.01" placeholder="Price per kg" /></label><label>Currency<select name="currency" defaultValue="ETB"><option>ETB</option><option>USD</option><option>EUR</option></select></label></div>
             <label>Description<textarea name="description" rows="3" placeholder="Describe your coffee, harvest and availability…" /></label>
