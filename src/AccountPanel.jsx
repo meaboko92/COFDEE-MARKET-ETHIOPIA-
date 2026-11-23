@@ -152,7 +152,15 @@ export default function AccountPanel() {
       if (session?.user) loadAccount(session.user);
       else { setApproved(false); setSupplierApplication(null); setVerificationDocs([]); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
     });
-    return () => { mounted = false; listener.subscription.unsubscribe(); };
+    const refreshSupplierApplication = () => {
+      if (mounted && user) loadAccount(user);
+    };
+    window.addEventListener('mea-boko-supplier-application-updated', refreshSupplierApplication);
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+      window.removeEventListener('mea-boko-supplier-application-updated', refreshSupplierApplication);
+    };
   }, [loadAccount]);
 
   useEffect(() => {
