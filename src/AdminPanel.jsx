@@ -15,11 +15,12 @@ export default function AdminPanel() {
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [tradeDocuments, setTradeDocuments] = useState([]);
   const [exportDetails, setExportDetails] = useState([]);
+  const [buyerProfiles, setBuyerProfiles] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -44,13 +45,15 @@ export default function AdminPanel() {
       supabase.from('order_export_details')
         .select('id,order_id,destination_country,destination_port,importer_company,buyer_reference,coffee_variety,grade,process,moisture_percent,crop_year,lot_reference,bag_count,bag_weight_kg,packaging,export_notes,updated_at')
         .order('updated_at', { ascending: false }).limit(200),
+      supabase.from('buyer_business_profiles').select('buyer_id,company_name,country,city,business_type,website,preferred_origins,buyer_notes,updated_at').order('updated_at', { ascending: false }).limit(200),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
     setInquiries(inquiriesResult.data || []);
     setOrders(ordersResult.data || []);
+    setBuyerProfiles(buyerProfilesResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
@@ -136,6 +139,18 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>International buyer directory</h3><span>{buyerProfiles.length} profiles</span></div>
+      {buyerProfiles.length ? buyerProfiles.map((buyer) => <article className="admin-record" key={buyer.buyer_id}>
+        <div className="admin-record-main"><div><h4>{buyer.company_name || 'Buyer company not provided'}</h4><span className="listing-status status-approved">{buyer.business_type.replaceAll('_',' ')}</span></div>
+          <p>{[buyer.city,buyer.country].filter(Boolean).join(', ') || 'Location not provided'}</p>
+          {buyer.preferred_origins?.length > 0 && <p>Preferred origins: {buyer.preferred_origins.join(', ')}</p>}
+          {buyer.website && <p><a href={buyer.website} target="_blank" rel="noreferrer">{buyer.website}</a></p>}
+          {buyer.buyer_notes && <p>{buyer.buyer_notes}</p>}
+          <small>Updated {new Date(buyer.updated_at).toLocaleString()}</small>
+        </div>
+      </article>) : <p className="admin-empty">No buyer business profiles have been added yet.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Supplier applications</h3><span>{pendingApplications.length} to review</span></div>
