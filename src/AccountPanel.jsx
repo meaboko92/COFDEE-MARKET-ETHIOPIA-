@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 
+const tradeDocumentTypes = [
+  ['commercial_invoice','Commercial invoice'],['packing_list','Packing list'],['certificate_of_origin','Certificate of origin'],
+  ['phytosanitary_certificate','Phytosanitary certificate'],['quality_certificate','Coffee quality certificate'],
+  ['export_permit','Export permit / authorization'],['bill_of_lading','Bill of lading'],['other','Other supporting document'],
+];
+
 export default function AccountPanel() {
   const [user, setUser] = useState(null);
   const [mode, setMode] = useState('login');
@@ -15,6 +21,7 @@ export default function AccountPanel() {
   const [orderProposals, setOrderProposals] = useState([]);
   const [orderShipments, setOrderShipments] = useState([]);
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
+  const [tradeDocuments, setTradeDocuments] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
@@ -35,7 +42,7 @@ export default function AccountPanel() {
       .select('id,name,product_type,market,status,quantity_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
     setListings(ownListings || []);
-    const orderSelect = 'id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings!inner(name,supplier_id)';
+    const orderSelect = 'id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings!inner(name,supplier_id,market)';
     const [buyerResult, supplierResult] = await Promise.all([
       supabase.from('orders').select(orderSelect).eq('buyer_id', currentUser.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('orders').select(orderSelect).eq('coffee_listings.supplier_id', currentUser.id).order('created_at', { ascending: false }).limit(50),
@@ -63,11 +70,17 @@ export default function AccountPanel() {
       ]);
       setOrderShipments(shipments || []);
       setDeliveryConfirmations(confirmations || []);
+      const { data: documents } = await supabase.from('order_trade_documents')
+        .select('id,order_id,uploaded_by,document_type,original_filename,file_path,status,review_note,reviewed_at,created_at')
+        .in('order_id', participantOrders.map((order) => order.id))
+        .order('created_at', { ascending: false });
+      setTradeDocuments(documents || []);
     } else {
       setOrderMessages([]);
       setOrderProposals([]);
       setOrderShipments([]);
       setDeliveryConfirmations([]);
+      setTradeDocuments([]);
     }
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
@@ -86,7 +99,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -123,7 +136,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -202,6 +215,55 @@ export default function AccountPanel() {
     ]);
     setOrderMessages(refreshed || []);
     setOrderProposals(refreshedProposals || []);
+  }
+
+  async function uploadTradeDocument(order, event) {
+    event.preventDefault();
+    if (!user || !supabase || order.status !== 'confirmed' || !['export','both'].includes(order.coffee_listings?.market)) return;
+    const form = new FormData(event.currentTarget);
+    const file = form.get('document_file');
+    const documentType = String(form.get('document_type') || '');
+    const allowedTypes = ['application/pdf','image/jpeg','image/png'];
+    if (!(file instanceof File) || !file.size) { setError('Choose a PDF, JPG or PNG file first.'); return; }
+    if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setError('Upload a PDF, JPG or PNG file no larger than 10 MB.');
+      return;
+    }
+    if (!tradeDocumentTypes.some(([value]) => value === documentType)) { setError('Choose a document type.'); return; }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120) || 'trade-document';
+    const filePath = order.id + '/' + user.id + '/' + crypto.randomUUID() + '-' + safeName;
+    setMessageBusy((current) => ({ ...current, [order.id]: true }));
+    setError('');
+    const { error: uploadError } = await supabase.storage.from('trade-documents').upload(filePath, file, {
+      contentType: file.type, upsert: false,
+    });
+    if (uploadError) {
+      setMessageBusy((current) => ({ ...current, [order.id]: false }));
+      setError(uploadError.message);
+      return;
+    }
+    const { error: recordError } = await supabase.from('order_trade_documents').insert({
+      order_id: order.id, uploaded_by: user.id, document_type: documentType,
+      original_filename: file.name.slice(0,255), file_path: filePath,
+    });
+    if (recordError) {
+      await supabase.storage.from('trade-documents').remove([filePath]);
+      setMessageBusy((current) => ({ ...current, [order.id]: false }));
+      setError(recordError.message);
+      return;
+    }
+    setMessageBusy((current) => ({ ...current, [order.id]: false }));
+    setMessage('Trade document uploaded to private order storage.');
+    event.currentTarget.reset();
+    await loadAccount(user);
+  }
+
+  async function openTradeDocument(document) {
+    if (!supabase) return;
+    setError('');
+    const { data, error: urlError } = await supabase.storage.from('trade-documents').createSignedUrl(document.file_path, 60);
+    if (urlError) { setError(urlError.message); return; }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   }
 
   async function saveShipment(orderId, event) {
@@ -330,6 +392,21 @@ export default function AccountPanel() {
                 <label>Estimated delivery date<input name="estimated_delivery_date" type="date" defaultValue={shipment.estimated_delivery_date || ''} /></label>
                 <label>Delivery notes<textarea name="delivery_notes" rows="2" maxLength="2000" defaultValue={shipment.delivery_notes || ''} /></label>
                 <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Saving…' : 'Update delivery tracking'}</button>
+              </form>}
+            </section>}
+            {item.status === 'confirmed' && ['export','both'].includes(item.coffee_listings?.market) && <section className="trade-documents-panel">
+              <div className="delivery-panel-heading"><b>Export trade documents</b><span>{tradeDocuments.filter((doc) => doc.order_id === item.id).length} uploaded</span></div>
+              <p className="account-hint">Upload supporting files for this export order. Files are private and visible only to this order's buyer, supplier and MEA BOKO administrators. Document requirements depend on the destination and current authorities; this checklist is for record management, not a legal clearance decision.</p>
+              <div className="trade-document-list">
+                {tradeDocuments.filter((doc) => doc.order_id === item.id).map((doc) => <div className="trade-document-row" key={doc.id}>
+                  <div><b>{tradeDocumentTypes.find(([value]) => value === doc.document_type)?.[1] || doc.document_type}</b><small>{doc.original_filename} · {new Date(doc.created_at).toLocaleDateString()}</small>{doc.review_note && <small>Review note: {doc.review_note}</small>}</div>
+                  <div className="trade-document-actions"><span className={'listing-status status-'+doc.status}>{doc.status.replaceAll('_',' ')}</span><button type="button" className="text-link" onClick={() => openTradeDocument(doc)}>Open file ↗</button></div>
+                </div>)}
+                {!tradeDocuments.some((doc) => doc.order_id === item.id) && <p className="account-hint">No supporting documents uploaded yet.</p>}
+              </div>
+              {!isBuyer && <form className="shipment-form trade-document-form" onSubmit={(event) => uploadTradeDocument(item,event)}>
+                <div className="form-row"><label>Document type<select name="document_type" required defaultValue=""><option value="" disabled>Select document type</option>{tradeDocumentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Choose file<input type="file" name="document_file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required /></label></div>
+                <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Uploading…' : 'Upload trade document'}</button>
               </form>}
             </section>}
             <form className="order-message-form" onSubmit={(event) => sendOrderMessage(item.id, event)}>
