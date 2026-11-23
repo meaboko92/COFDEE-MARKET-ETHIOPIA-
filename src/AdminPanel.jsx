@@ -3,6 +3,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase';
 
 export default function AdminPanel() {
   const [admin, setAdmin] = useState(false);
+  const [adminUserId, setAdminUserId] = useState('');
   const [checking, setChecking] = useState(true);
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
@@ -17,11 +18,13 @@ export default function AdminPanel() {
   const [exportDetails, setExportDetails] = useState([]);
   const [buyerProfiles, setBuyerProfiles] = useState([]);
   const [paymentRecords, setPaymentRecords] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [roleAudit, setRoleAudit] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -48,8 +51,10 @@ export default function AdminPanel() {
         .order('updated_at', { ascending: false }).limit(200),
       supabase.from('buyer_business_profiles').select('buyer_id,company_name,country,city,business_type,website,preferred_origins,buyer_notes,updated_at').order('updated_at', { ascending: false }).limit(200),
       supabase.from('order_payment_records').select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at').order('created_at', { ascending: false }).limit(300),
+      supabase.from('profiles').select('id,full_name,phone,role,created_at,updated_at').order('created_at', { ascending: false }).limit(200),
+      supabase.from('admin_role_audit').select('id,actor_user_id,target_user_id,old_role,new_role,created_at').order('created_at', { ascending: false }).limit(50),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
@@ -57,6 +62,8 @@ export default function AdminPanel() {
     setOrders(ordersResult.data || []);
     setBuyerProfiles(buyerProfilesResult.data || []);
     setPaymentRecords(paymentsResult.data || []);
+    setProfiles(profilesResult.data || []);
+    setRoleAudit(roleAuditResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
@@ -72,6 +79,7 @@ export default function AdminPanel() {
     const { data, error: profileError } = await supabase.from('profiles')
       .select('role').eq('id', currentUser.id).maybeSingle();
     setAdmin(!profileError && data?.role === 'admin');
+    setAdminUserId(!profileError && data?.role === 'admin' ? currentUser.id : '');
     setChecking(false);
   }, []);
 
@@ -95,6 +103,19 @@ export default function AdminPanel() {
   useEffect(() => {
     if (admin) loadDashboard();
   }, [admin, loadDashboard]);
+
+  async function changeProfileRole(profile, nextRole) {
+    if (!profile || profile.id === adminUserId || !['buyer','admin'].includes(nextRole)) return;
+    setBusyId(profile.id); setError(''); setNotice('');
+    const { error: roleError } = await supabase.rpc('set_profile_role', {
+      target_user_id: profile.id,
+      target_role: nextRole,
+    });
+    setBusyId('');
+    if (roleError) { setError(roleError.message); return; }
+    setNotice('Account role updated. The change is recorded in the administrator audit log.');
+    await loadDashboard();
+  }
 
   function downloadFinancialReport() {
     const rows = [['Order ID','Order status','Quantity kg','Agreed price per kg','Currency','Order value','Verified payments','Outstanding balance','Payment record status','Payment amount','Payment date','Payment reference']];
@@ -221,6 +242,29 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Account roles & permissions</h3><span>{profiles.length} accounts loaded · latest 200</span></div>
+      <p className="account-hint">Only administrators can change account roles. Buyer accounts can trade as buyers; supplier tools remain controlled by supplier application approval. You cannot change your own administrator role, and the last administrator is protected.</p>
+      {profiles.length ? profiles.map((profile) => <article className="admin-record" key={profile.id}>
+        <div className="admin-record-main">
+          <div><h4>{profile.full_name || 'Name not provided'}</h4><span className={'listing-status status-'+profile.role}>{profile.role}</span></div>
+          <p>{profile.phone || 'Phone not provided'}</p>
+          <small>Account ID: {profile.id.slice(0,8).toUpperCase()} · Created {new Date(profile.created_at).toLocaleDateString()}</small>
+        </div>
+        <div className="admin-actions">
+          <label className="admin-role-label">Account role
+            <select aria-label={'Role for '+(profile.full_name || profile.id)} value={profile.role} disabled={profile.id === adminUserId || busyId === profile.id} onChange={(event) => changeProfileRole(profile,event.target.value)}>
+              <option value="buyer">Buyer</option><option value="admin">Administrator</option>
+            </select>
+          </label>
+          {profile.id === adminUserId && <small>Your own role is locked here.</small>}
+        </div>
+      </article>) : <p className="admin-empty">No account profiles are available.</p>}
+      <h4>Recent role changes</h4>
+      {roleAudit.length ? roleAudit.slice(0,10).map((entry) => <article className="admin-record" key={entry.id}>
+        <div className="admin-record-main"><p>Account {entry.target_user_id.slice(0,8).toUpperCase()}: {entry.old_role} → {entry.new_role}</p><small>Changed by {entry.actor_user_id.slice(0,8).toUpperCase()} · {new Date(entry.created_at).toLocaleString()}</small></div>
+      </article>) : <p className="admin-empty">No role changes have been recorded.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Low-stock alerts</h3><span>{lowStockListings.length} listings need attention</span></div>
