@@ -61,7 +61,7 @@ export default function App() {
           .select('id,supplier_id,name,product_type,market,process,grade,tasting_notes,description,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,origin_id,photo_url,origins(name,region)')
           .eq('status', 'approved')
           .order('created_at', { ascending: false }),
-        supabase.from('origins').select('id,name,region,description').order('name'),
+        supabase.from('origins').select('id,name,region,description,origin_level,parent_id,sort_order').eq('is_active', true).order('sort_order').order('name'),
         supabase.from('supplier_business_verifications').select('user_id'),
       ]);
       if (!active) return;
@@ -299,7 +299,7 @@ export default function App() {
           <label className="search-box"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search coffee, origin, process…" /></label>
           <select aria-label="Coffee type" value={productType} onChange={(event) => setProductType(event.target.value)}><option value="all">All coffee types</option><option value="green_beans">Green coffee beans</option><option value="roasted_beans">Roasted coffee</option><option value="ground_coffee">Ground coffee</option></select>
           <select aria-label="Market" value={market} onChange={(event) => setMarket(event.target.value)}><option value="all">All markets</option><option value="domestic">Domestic</option><option value="export">International export</option></select>
-          <select aria-label="Coffee origin" value={origin} onChange={(event) => setOrigin(event.target.value)}><option value="all">All origins</option>{origins.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+          <select aria-label="Coffee origin" value={origin} onChange={(event) => setOrigin(event.target.value)}><option value="all">All origins</option>{origins.filter((item) => item.origin_level === 'origin').map((item) => <option value={item.id} key={item.id}>{[origins.find((parent) => parent.id === item.parent_id)?.name, item.name].filter(Boolean).join(' / ')}</option>)}</select>
         </div>
         {error && <div className="notice error-notice">{error}</div>}
         {loading ? <div className="empty-market">Loading coffee listings…</div> : filteredListings.length ? (
@@ -314,7 +314,7 @@ export default function App() {
 
       <section className="origins-section section-wrap" id="origins">
         <div className="section-head"><div><p className="eyebrow">THE PLACES BEHIND THE FLAVOR</p><h2>Explore Ethiopian origins</h2><p>Discover the coffee-growing regions represented in our marketplace.</p></div></div>
-        <div className="origin-grid">{(origins.length ? origins : [{name:'Guji',region:'Oromia'},{name:'Sidama',region:'Sidama'},{name:'Yirgacheffe',region:'Gedeo'}]).map((item, index) => <article className={`origin-card origin-${index % 3}`} key={item.id || item.name}><span className="origin-number">0{index + 1}</span><div><h3>{item.name}</h3><p>{item.region}</p>{item.description && <small>{item.description}</small>}</div><span className="origin-arrow">↗</span></article>)}</div>
+        <div className="origin-grid">{origins.filter((item) => item.origin_level === 'origin').map((item, index) => <article className={`origin-card origin-${index % 3}`} key={item.id}><span className="origin-number">{String(index + 1).padStart(2, '0')}</span><div><h3>{item.name}</h3><p>{[origins.find((parent) => parent.id === item.parent_id)?.name, item.region].filter(Boolean).join(' · ')}</p>{item.description && <small>{item.description}</small>}</div><span className="origin-arrow">↗</span></article>)}</div>
       </section>
 
       <AccountPanel />
