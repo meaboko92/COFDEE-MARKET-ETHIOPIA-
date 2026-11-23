@@ -116,6 +116,7 @@ export default function AdminPanel() {
         <div className="admin-record-main"><div><h4>{item.name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p><a href={'mailto:'+item.email}>{item.email}</a>{item.phone ? ' · '+item.phone : ''}</p><p>{item.message}</p><small>Listing reference: {item.listing_id || 'General inquiry'} · {new Date(item.created_at).toLocaleString()}</small></div>
         <div className="admin-actions">{item.status !== 'in_progress' && item.status !== 'closed' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'in_progress')}>Mark in progress</button>}{item.status !== 'closed' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'closed')}>Close inquiry</button>}</div>
       </article>) : <p className="admin-empty">No buyer inquiries yet.</p>}
+    </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Trade order management</h3><span>{activeOrders.length} active</span></div>
       {orders.length ? orders.map((item) => <article className="admin-record" key={item.id}>
