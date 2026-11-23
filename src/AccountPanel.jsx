@@ -22,6 +22,7 @@ export default function AccountPanel() {
   const [orderShipments, setOrderShipments] = useState([]);
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [tradeDocuments, setTradeDocuments] = useState([]);
+  const [exportDetails, setExportDetails] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
@@ -75,12 +76,17 @@ export default function AccountPanel() {
         .in('order_id', participantOrders.map((order) => order.id))
         .order('created_at', { ascending: false });
       setTradeDocuments(documents || []);
+      const { data: exportRows } = await supabase.from('order_export_details')
+        .select('id,order_id,destination_country,destination_port,importer_company,buyer_reference,coffee_variety,grade,process,moisture_percent,crop_year,lot_reference,bag_count,bag_weight_kg,packaging,export_notes,updated_by,updated_at')
+        .in('order_id', participantOrders.map((order) => order.id));
+      setExportDetails(exportRows || []);
     } else {
       setOrderMessages([]);
       setOrderProposals([]);
       setOrderShipments([]);
       setDeliveryConfirmations([]);
       setTradeDocuments([]);
+      setExportDetails([]);
     }
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
@@ -99,7 +105,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -136,7 +142,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -215,6 +221,50 @@ export default function AccountPanel() {
     ]);
     setOrderMessages(refreshed || []);
     setOrderProposals(refreshedProposals || []);
+  }
+
+  async function saveExportDetails(order, event) {
+    event.preventDefault();
+    if (!user || !supabase || order.status !== 'confirmed' || !['export','both'].includes(order.coffee_listings?.market)) return;
+    const form = new FormData(event.currentTarget);
+    const numberOrNull = (value) => String(value || '').trim() === '' ? null : Number(value);
+    const moisture = numberOrNull(form.get('moisture_percent'));
+    const bagCount = numberOrNull(form.get('bag_count'));
+    const bagWeight = numberOrNull(form.get('bag_weight_kg'));
+    if (moisture !== null && (!Number.isFinite(moisture) || moisture < 0 || moisture > 100)) { setError('Moisture percentage must be between 0 and 100.'); return; }
+    if (bagCount !== null && (!Number.isInteger(bagCount) || bagCount < 0)) { setError('Bag count must be a whole number.'); return; }
+    if (bagWeight !== null && (!Number.isFinite(bagWeight) || bagWeight <= 0)) { setError('Bag weight must be greater than zero.'); return; }
+    const payload = {
+      order_id: order.id,
+      destination_country: String(form.get('destination_country') || '').trim(),
+      destination_port: String(form.get('destination_port') || '').trim() || null,
+      importer_company: String(form.get('importer_company') || '').trim() || null,
+      buyer_reference: String(form.get('buyer_reference') || '').trim() || null,
+      coffee_variety: String(form.get('coffee_variety') || '').trim() || null,
+      grade: String(form.get('grade') || '').trim() || null,
+      process: String(form.get('process') || '').trim() || null,
+      moisture_percent: moisture,
+      crop_year: String(form.get('crop_year') || '').trim() || null,
+      lot_reference: String(form.get('lot_reference') || '').trim() || null,
+      bag_count: bagCount,
+      bag_weight_kg: bagWeight,
+      packaging: String(form.get('packaging') || '').trim() || null,
+      export_notes: String(form.get('export_notes') || '').trim() || null,
+      updated_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+    if (!payload.destination_country) { setError('Enter the destination country.'); return; }
+    const existing = exportDetails.find((row) => row.order_id === order.id);
+    setMessageBusy((current) => ({ ...current, [order.id]: true }));
+    setError('');
+    const result = existing
+      ? await supabase.from('order_export_details').update(payload).eq('id', existing.id).select('id').maybeSingle()
+      : await supabase.from('order_export_details').insert(payload).select('id').maybeSingle();
+    setMessageBusy((current) => ({ ...current, [order.id]: false }));
+    if (result.error) { setError(result.error.message); return; }
+    if (!result.data) { setError('Export details were not saved. Refresh and try again.'); return; }
+    setMessage('Export shipment details saved.');
+    await loadAccount(user);
   }
 
   async function uploadTradeDocument(order, event) {
@@ -395,6 +445,42 @@ export default function AccountPanel() {
                 <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Saving…' : 'Update delivery tracking'}</button>
               </form>}
             </section>}
+            {item.status === 'confirmed' && ['export','both'].includes(item.coffee_listings?.market) && (() => {
+              const details = exportDetails.find((row) => row.order_id === item.id);
+              const orderDocs = tradeDocuments.filter((doc) => doc.order_id === item.id);
+              const checklist = tradeDocumentTypes.map(([value,label]) => ({ value,label,uploaded:orderDocs.some((doc) => doc.document_type === value && doc.status !== 'rejected') }));
+              return <section className="export-operations-panel">
+                <div className="delivery-panel-heading"><b>Export shipment profile</b><span>{details ? 'Details saved' : 'Details pending'}</span></div>
+                <p className="account-hint">Order quantity: <b>{Number(item.quantity_kg).toLocaleString()} kg</b> · Buyer account: {item.buyer_id.slice(0,8).toUpperCase()}</p>
+                {details && <div className="export-detail-summary">
+                  <p><b>Destination:</b> {details.destination_country}{details.destination_port ? ' · '+details.destination_port : ''}</p>
+                  <p><b>Importer:</b> {details.importer_company || 'Not entered'}{details.buyer_reference ? ' · Ref: '+details.buyer_reference : ''}</p>
+                  <p><b>Coffee:</b> {[details.coffee_variety,details.grade,details.process].filter(Boolean).join(' · ') || 'Not specified'}</p>
+                  <p><b>Quality:</b> {details.moisture_percent != null ? details.moisture_percent+'% moisture' : 'Moisture not recorded'} · Crop year: {details.crop_year || 'Not recorded'}</p>
+                  <p><b>Lot:</b> {details.lot_reference || 'Not assigned'} · Bags: {details.bag_count ?? '—'}{details.bag_weight_kg ? ' × '+details.bag_weight_kg+' kg' : ''} · Packaging: {details.packaging || 'Not specified'}</p>
+                  {details.export_notes && <p><b>Notes:</b> {details.export_notes}</p>}
+                </div>}
+                {!isBuyer && <details className="export-details-editor" open={!details}>
+                  <summary>{details ? 'Edit export details' : 'Add export details'}</summary>
+                  <form className="shipment-form" onSubmit={(event) => saveExportDetails(item,event)}>
+                    <div className="form-row"><label>Destination country<input name="destination_country" required maxLength="100" defaultValue={details?.destination_country || ''} placeholder="e.g. Germany" /></label><label>Destination port<input name="destination_port" maxLength="120" defaultValue={details?.destination_port || ''} placeholder="Port / arrival terminal" /></label></div>
+                    <div className="form-row"><label>Importer / buyer company<input name="importer_company" maxLength="180" defaultValue={details?.importer_company || ''} placeholder="Company name" /></label><label>Buyer reference<input name="buyer_reference" maxLength="120" defaultValue={details?.buyer_reference || ''} placeholder="Purchase reference" /></label></div>
+                    <div className="form-row"><label>Coffee variety<input name="coffee_variety" maxLength="120" defaultValue={details?.coffee_variety || ''} placeholder="Variety / cultivar" /></label><label>Grade<input name="grade" maxLength="80" defaultValue={details?.grade || item.coffee_listings?.grade || ''} placeholder="Grade" /></label></div>
+                    <div className="form-row"><label>Processing<input name="process" maxLength="80" defaultValue={details?.process || ''} placeholder="Washed / natural" /></label><label>Moisture (%)<input name="moisture_percent" type="number" min="0" max="100" step="0.01" defaultValue={details?.moisture_percent ?? ''} placeholder="Not tested" /></label></div>
+                    <div className="form-row"><label>Crop year<input name="crop_year" maxLength="20" defaultValue={details?.crop_year || ''} placeholder="e.g. 2026/27" /></label><label>Lot reference<input name="lot_reference" maxLength="100" defaultValue={details?.lot_reference || ''} placeholder="Lot / batch ID" /></label></div>
+                    <div className="form-row"><label>Bag count<input name="bag_count" type="number" min="0" step="1" defaultValue={details?.bag_count ?? ''} /></label><label>Bag weight (kg)<input name="bag_weight_kg" type="number" min="0.01" step="0.01" defaultValue={details?.bag_weight_kg ?? ''} /></label></div>
+                    <label>Packaging<input name="packaging" maxLength="100" defaultValue={details?.packaging || ''} placeholder="Jute / GrainPro / other" /></label>
+                    <label>Export notes<textarea name="export_notes" rows="2" maxLength="2000" defaultValue={details?.export_notes || ''} placeholder="Additional lot or buyer instructions…" /></label>
+                    <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Saving…' : 'Save export profile'}</button>
+                  </form>
+                </details>}
+                <div className="export-checklist">
+                  <b>Document record checklist</b>
+                  <p className="account-hint">This tracks uploaded files only; it does not determine which documents are legally required.</p>
+                  {checklist.map((entry) => <div className="export-check-row" key={entry.value}><span>{entry.label}</span><span className={entry.uploaded ? 'check-present' : 'check-missing'}>{entry.uploaded ? 'Uploaded' : 'Not uploaded'}</span></div>)}
+                </div>
+              </section>;
+            })()}
             {item.status === 'confirmed' && ['export','both'].includes(item.coffee_listings?.market) && <section className="trade-documents-panel">
               <div className="delivery-panel-heading"><b>Export trade documents</b><span>{tradeDocuments.filter((doc) => doc.order_id === item.id).length} uploaded</span></div>
               <p className="account-hint">Upload supporting files for this export order. Files are private and visible only to this order's buyer, supplier and MEA BOKO administrators. Document requirements depend on the destination and current authorities; this checklist is for record management, not a legal clearance decision.</p>
