@@ -12,6 +12,7 @@ export default function AccountPanel() {
   const [listings, setListings] = useState([]);
   const [orders, setOrders] = useState([]);
   const [orderMessages, setOrderMessages] = useState([]);
+  const [orderProposals, setOrderProposals] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
@@ -47,7 +48,15 @@ export default function AccountPanel() {
         .in('order_id', participantOrders.map((order) => order.id))
         .order('created_at', { ascending: true });
       setOrderMessages(messages || []);
-    } else setOrderMessages([]);
+      const { data: proposals } = await supabase.from('order_price_proposals')
+        .select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at')
+        .in('order_id', participantOrders.map((order) => order.id))
+        .order('created_at', { ascending: false });
+      setOrderProposals(proposals || []);
+    } else {
+      setOrderMessages([]);
+      setOrderProposals([]);
+    }
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
   }, []);
@@ -65,7 +74,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -151,22 +160,51 @@ export default function AccountPanel() {
     setMessageBusy((current) => ({ ...current, [orderId]: true }));
     setError('');
     const order = orders.find((item) => item.id === orderId);
-    const { error: sendError } = await supabase.from('order_messages').insert({
-      order_id: orderId,
-      sender_id: user.id,
-      body,
-      proposed_price: proposedPrice,
-      currency: order?.currency || 'ETB',
-    });
+    if (body) {
+      const { error: messageError } = await supabase.from('order_messages').insert({
+        order_id: orderId, sender_id: user.id, body, currency: order?.currency || 'ETB',
+      });
+      if (messageError) {
+        setMessageBusy((current) => ({ ...current, [orderId]: false }));
+        setError(messageError.message);
+        return;
+      }
+    }
+    if (rawPrice) {
+      const { error: proposalError } = await supabase.from('order_price_proposals').insert({
+        order_id: orderId, proposer_id: user.id, amount: proposedPrice, currency: order?.currency || 'ETB',
+      });
+      if (proposalError) {
+        setMessageBusy((current) => ({ ...current, [orderId]: false }));
+        setError(proposalError.code === '23505' ? 'There is already a pending price proposal for this order. Respond to it before sending another.' : proposalError.message);
+        return;
+      }
+    }
     setMessageBusy((current) => ({ ...current, [orderId]: false }));
-    if (sendError) { setError(sendError.message); return; }
     setMessageDrafts((current) => ({ ...current, [orderId]: '' }));
     setPriceDrafts((current) => ({ ...current, [orderId]: '' }));
-    const { data: refreshed } = await supabase.from('order_messages')
-      .select('id,order_id,sender_id,body,proposed_price,currency,created_at')
-      .in('order_id', orders.map((item) => item.id))
-      .order('created_at', { ascending: true });
+    const orderIds = orders.map((item) => item.id);
+    const [{ data: refreshed }, { data: refreshedProposals }] = await Promise.all([
+      supabase.from('order_messages').select('id,order_id,sender_id,body,proposed_price,currency,created_at').in('order_id', orderIds).order('created_at', { ascending: true }),
+      supabase.from('order_price_proposals').select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at').in('order_id', orderIds).order('created_at', { ascending: false }),
+    ]);
     setOrderMessages(refreshed || []);
+    setOrderProposals(refreshedProposals || []);
+  }
+
+  async function respondToPriceProposal(proposal, decision) {
+    if (!user || !supabase || proposal.proposer_id === user.id || proposal.status !== 'pending') return;
+    setMessageBusy((current) => ({ ...current, [proposal.order_id]: true }));
+    setError('');
+    const { data, error: responseError } = await supabase.from('order_price_proposals')
+      .update({ status: decision, responded_by: user.id, responded_at: new Date().toISOString() })
+      .eq('id', proposal.id).eq('status', 'pending')
+      .select('id,status').maybeSingle();
+    setMessageBusy((current) => ({ ...current, [proposal.order_id]: false }));
+    if (responseError) { setError(responseError.message); return; }
+    if (!data) { setError('This proposal has already been answered or is no longer available. Refresh your account.'); return; }
+    await loadAccount(user);
+    setMessage(decision === 'accepted' ? 'Price accepted. The order price is now confirmed.' : 'Price proposal declined.');
   }
 
   if (!isSupabaseConfigured) return <section className="account-section" id="account"><div className="account-card"><h2>Member account</h2><p>Supabase connection settings are needed before accounts can be used.</p></div></section>;
@@ -206,10 +244,14 @@ export default function AccountPanel() {
           const thread = orderMessages.filter((message) => message.order_id === item.id);
           return <article className="trade-order-card" key={item.id}>
             <div className="trade-order-head"><div><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{isBuyer ? 'Buyer view' : 'Supplier view'} · {Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></div><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
-            <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Price proposal: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
+            <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Earlier price note: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
+            <div className="price-proposal-list"><b>Price proposals</b>{orderProposals.filter((proposal) => proposal.order_id === item.id).length ? orderProposals.filter((proposal) => proposal.order_id === item.id).map((proposal) => {
+              const isRecipient = proposal.proposer_id !== user.id;
+              return <div className="price-proposal-card" key={proposal.id}><div><strong>{Number(proposal.amount).toLocaleString()} {proposal.currency} / kg</strong><small>{proposal.proposer_id === user.id ? 'Proposed by you' : 'Proposed by trade partner'} · {new Date(proposal.created_at).toLocaleString()}</small><span className={'listing-status status-'+proposal.status}>{proposal.status}</span></div>{proposal.status === 'pending' && isRecipient && <div className="admin-actions"><button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'accepted')}>Accept price</button><button type="button" className="admin-danger" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'declined')}>Decline</button></div>}</div>;
+            }) : <p className="account-hint">No price proposals yet.</p>}</div>
             <form className="order-message-form" onSubmit={(event) => sendOrderMessage(item.id, event)}>
               <label>Message<textarea rows="2" maxLength="3000" value={messageDrafts[item.id] || ''} onChange={(event) => setMessageDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Discuss quality, delivery, documents or other order details…" /></label>
-              <div className="form-row"><label>Optional price proposal ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim())}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
+              <div className="form-row"><label>Propose price per kg ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim())}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
             </form>
           </article>;
         })}</div> : <p className="account-hint">You have no buyer or supplier trade orders yet.</p>}
