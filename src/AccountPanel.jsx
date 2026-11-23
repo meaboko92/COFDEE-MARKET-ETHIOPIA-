@@ -221,10 +221,11 @@ export default function AccountPanel() {
     setMessageBusy((current) => ({ ...current, [orderId]: true }));
     setError('');
     const result = existing
-      ? await supabase.from('order_shipments').update(payload).eq('id', existing.id)
-      : await supabase.from('order_shipments').insert({ ...payload, order_id: orderId, status: 'preparing' });
+      ? await supabase.from('order_shipments').update(payload).eq('id', existing.id).select('id').maybeSingle()
+      : await supabase.from('order_shipments').insert({ ...payload, order_id: orderId, status: 'preparing' }).select('id').maybeSingle();
     setMessageBusy((current) => ({ ...current, [orderId]: false }));
     if (result.error) { setError(result.error.message); return; }
+    if (!result.data) { setError('Delivery details were not saved. Check that this is your confirmed order, then refresh.'); return; }
     setMessage('Delivery tracking information saved.');
     await loadAccount(user);
   }
