@@ -96,6 +96,34 @@ export default function AdminPanel() {
     if (admin) loadDashboard();
   }, [admin, loadDashboard]);
 
+  function downloadFinancialReport() {
+    const rows = [['Order ID','Order status','Quantity kg','Agreed price per kg','Currency','Order value','Verified payments','Outstanding balance','Payment record status','Payment amount','Payment date','Payment reference']];
+    orders.forEach((order) => {
+      const orderPayments = paymentRecords.filter((record) => record.order_id === order.id);
+      const verifiedTotal = orderPayments.filter((record) => record.status === 'verified').reduce((sum, record) => sum + Number(record.amount || 0), 0);
+      const orderValue = order.agreed_price == null ? null : Number(order.agreed_price) * Number(order.quantity_kg || 0);
+      const balance = orderValue == null ? null : Math.max(0, orderValue - verifiedTotal);
+      if (!orderPayments.length) {
+        rows.push([order.id,order.status,order.quantity_kg,order.agreed_price ?? '',order.currency,orderValue ?? '',verifiedTotal,balance ?? '','','','','']);
+      } else {
+        orderPayments.forEach((record) => rows.push([
+          order.id,order.status,order.quantity_kg,order.agreed_price ?? '',order.currency,orderValue ?? '',verifiedTotal,balance ?? '',
+          record.status,record.amount,record.payment_date || '',record.payment_reference || '',
+        ]));
+      }
+    });
+    const csv = rows.map((row) => row.map((value) => '"' + String(value ?? '').replaceAll('"','""') + '"').join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'mea-boko-trade-financial-report.csv';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function reviewPaymentRecord(record, status) {
     setBusyId(record.id); setError(''); setNotice('');
     const { data: authData } = await supabase.auth.getUser();
@@ -145,6 +173,15 @@ export default function AdminPanel() {
   const openInquiries = inquiries.filter((item) => item.status !== 'closed');
   const activeOrders = orders.filter((item) => !['fulfilled','cancelled'].includes(item.status));
 
+  const financialSummary = ['ETB','USD','EUR'].map((currency) => {
+    const currencyOrders = orders.filter((order) => order.currency === currency);
+    const orderValue = currencyOrders.reduce((sum, order) => sum + (order.agreed_price == null ? 0 : Number(order.agreed_price) * Number(order.quantity_kg || 0)), 0);
+    const verifiedPayments = paymentRecords.filter((record) => record.currency === currency && record.status === 'verified').reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const pendingPayments = paymentRecords.filter((record) => record.currency === currency && record.status === 'pending').reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const pricedOrderCount = currencyOrders.filter((order) => order.agreed_price != null).length;
+    return { currency, orderValue, verifiedPayments, pendingPayments, outstanding: Math.max(0, orderValue - verifiedPayments), pricedOrderCount, orderCount: currencyOrders.length };
+  });
+
   return <section className="admin-section" id="admin">
     <div className="admin-heading"><div><p className="eyebrow">PRIVATE MANAGEMENT</p><h2>MEA BOKO Admin Dashboard</h2><p>Review supplier applications, moderate coffee listings and follow buyer inquiries.</p></div><button className="button button-dark" onClick={loadDashboard}>Refresh dashboard ↻</button></div>
     {error && <div className="notice error-notice">{error}</div>}
@@ -154,6 +191,19 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block financial-report-block">
+      <div className="admin-block-head"><h3>Financial reports & trade accounting</h3><button className="button button-dark" type="button" onClick={downloadFinancialReport}>Export CSV report ↓</button></div>
+      <p className="account-hint">Summary covers the latest 100 orders and up to 300 payment records loaded by this dashboard. Order value is quantity × agreed price per kg. Only records marked verified are deducted; pending entries are shown separately.</p>
+      <div className="admin-stats">
+        {financialSummary.filter((item) => item.orderCount || item.pendingPayments || item.verifiedPayments).map((item) => <div key={item.currency}>
+          <strong>{item.currency} {item.orderValue.toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
+          <span>Agreed order value · {item.pricedOrderCount}/{item.orderCount} priced orders</span>
+          <small>Verified: {item.verifiedPayments.toLocaleString(undefined,{maximumFractionDigits:2})} · Pending: {item.pendingPayments.toLocaleString(undefined,{maximumFractionDigits:2})}</small>
+          <small>Estimated outstanding: {item.outstanding.toLocaleString(undefined,{maximumFractionDigits:2})}</small>
+        </div>)}
+      </div>
+      <p className="account-hint">Outstanding is an estimate based on recorded, verified payments. It does not include unrecorded payments, fees, taxes, freight adjustments, or disputed amounts. Balances are kept separate by currency.</p>
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Trade payment records</h3><span>{paymentRecords.length} entries · {paymentRecords.filter((record) => record.status === 'pending').length} pending review</span></div>
