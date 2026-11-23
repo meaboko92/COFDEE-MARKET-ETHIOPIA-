@@ -29,6 +29,7 @@ export default function AccountPanel() {
   const [messageBusy, setMessageBusy] = useState({});
   const [origins, setOrigins] = useState([]);
   const [buyerBusiness, setBuyerBusiness] = useState({ company_name: '', country: '', city: '', business_type: 'importer', website: '', preferred_origins: [], buyer_notes: '' });
+  const [buyerBusinessProfiles, setBuyerBusinessProfiles] = useState([]);
 
   const loadAccount = useCallback(async (currentUser) => {
     if (!currentUser || !supabase) return;
@@ -60,6 +61,11 @@ export default function AccountPanel() {
     const participantOrders = [...orderMap.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     setOrders(participantOrders);
     if (participantOrders.length) {
+      const buyerIds = [...new Set(participantOrders.map((order) => order.buyer_id))];
+      const { data: businessProfiles } = await supabase.from('buyer_business_profiles')
+        .select('buyer_id,company_name,country,city,business_type,website,preferred_origins,buyer_notes')
+        .in('buyer_id', buyerIds);
+      setBuyerBusinessProfiles(businessProfiles || []);
       const { data: messages } = await supabase.from('order_messages')
         .select('id,order_id,sender_id,body,proposed_price,currency,created_at')
         .in('order_id', participantOrders.map((order) => order.id))
@@ -88,6 +94,7 @@ export default function AccountPanel() {
         .in('order_id', participantOrders.map((order) => order.id));
       setExportDetails(exportRows || []);
     } else {
+      setBuyerBusinessProfiles([]);
       setOrderMessages([]);
       setOrderProposals([]);
       setOrderShipments([]);
@@ -485,10 +492,25 @@ export default function AccountPanel() {
           const shipment = orderShipments.find((record) => record.order_id === item.id);
           const receipt = deliveryConfirmations.find((record) => record.order_id === item.id);
           const isExportOrder = ['export','both'].includes(item.coffee_listings?.market);
+          const buyerBusinessInfo = buyerBusinessProfiles.find((profile) => profile.buyer_id === item.buyer_id);
+          const latestQuote = orderProposals.find((proposal) => proposal.order_id === item.id);
+          const orderExportDetails = exportDetails.find((detail) => detail.order_id === item.id);
+          const orderDocuments = tradeDocuments.filter((doc) => doc.order_id === item.id);
           const quoteDraft = quoteDrafts[item.id] || {};
           const hasQuoteFields = Object.values(quoteDraft).some((value) => String(value || '').trim());
           return <article className="trade-order-card" key={item.id}>
             <div className="trade-order-head"><div><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{isBuyer ? 'Buyer view' : 'Supplier view'} · {Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></div><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
+            {buyerBusinessInfo && <div className="buyer-order-context">
+              <b>{buyerBusinessInfo.company_name || (isBuyer ? 'Your buyer profile' : 'Buyer business profile')}</b>
+              <span>{[buyerBusinessInfo.city,buyerBusinessInfo.country].filter(Boolean).join(', ') || 'Business location not provided'}</span>
+              <span>{buyerBusinessInfo.business_type.replaceAll('_',' ')}{buyerBusinessInfo.preferred_origins?.length ? ' · Interested in '+buyerBusinessInfo.preferred_origins.join(', ') : ''}</span>
+            </div>}
+            {isExportOrder && <div className="buyer-export-summary">
+              <b>Export order summary</b>
+              <span>Destination: {orderExportDetails?.destination_country || 'Not yet provided'}{orderExportDetails?.destination_port ? ' · '+orderExportDetails.destination_port : ''}</span>
+              <span>Incoterm: {latestQuote?.incoterm || 'Not yet quoted'} · Shipment: {shipment?.status?.replaceAll('_',' ') || 'Not dispatched'}</span>
+              <span>Trade documents: {orderDocuments.length} uploaded</span>
+            </div>}
             <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Earlier price note: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
             <div className="price-proposal-list"><b>Price proposals</b>{orderProposals.filter((proposal) => proposal.order_id === item.id).length ? orderProposals.filter((proposal) => proposal.order_id === item.id).map((proposal) => {
               const isRecipient = proposal.proposer_id !== user.id;
