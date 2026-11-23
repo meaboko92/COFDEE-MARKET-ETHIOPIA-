@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import AccountPanel from './AccountPanel';
 import AdminPanel from './AdminPanel';
+import SupplierListingPanel from './SupplierListingPanel';
 import MarketAssistant from './MarketAssistant';
 
 const productLabels = {
@@ -57,7 +58,7 @@ export default function App() {
       setLoading(true);
       const [listingResult, originResult, verifiedResult] = await Promise.all([
         supabase.from('coffee_listings')
-          .select('id,supplier_id,name,product_type,market,process,grade,tasting_notes,description,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,origin_id,origins(name,region)')
+          .select('id,supplier_id,name,product_type,market,process,grade,tasting_notes,description,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,origin_id,photo_url,origins(name,region)')
           .eq('status', 'approved')
           .order('created_at', { ascending: false }),
         supabase.from('origins').select('id,name,region,description').order('name'),
@@ -279,7 +280,7 @@ export default function App() {
         {loading ? <div className="empty-market">Loading coffee listings…</div> : filteredListings.length ? (
           <div className="product-grid">{filteredListings.map((item) => (
             <article className="product-card" key={item.id}>
-              <div className="product-visual"><span className="product-chip">{productLabels[item.product_type] || item.product_type}</span><div className="product-bean">✦</div><span className="product-origin">{item.origins?.name || 'Ethiopia'}</span></div>
+              <div className="product-visual">{item.photo_url ? <img className="product-photo" src={item.photo_url} alt={`${item.name} coffee product`} loading="lazy" /> : <div className="product-photo-placeholder"><span className="product-chip">{productLabels[item.product_type] || item.product_type}</span><div className="product-bean">✦</div></div>}<span className="product-origin">{item.origins?.name || 'Ethiopia'}</span></div>
               <div className="product-info"><div className="product-meta"><span>{item.origins?.region || 'Ethiopia'}</span><span>{item.market === 'both' ? 'Domestic + Export' : item.market}</span>{item.supplierVerified && <span className="verified-badge">✓ Business verified</span>}</div><h3>{item.name}</h3><p>{[item.process, item.grade].filter(Boolean).join(' · ') || 'Ethiopian coffee'}</p>{item.tasting_notes && <p className="tasting-notes">{item.tasting_notes}</p>}<div className="product-bottom"><div><strong>{money(item.price, item.currency)}</strong>{item.available_quantity_kg !== null && <small>{Number(item.available_quantity_kg).toLocaleString()} kg available</small>}</div><div className="product-actions"><button className="button button-dark" onClick={() => { setSelectedListing(item); setModalMode('inquiry'); setInquirySent(false); setOrderSent(false); setInquiryMessage(''); setError(''); }}>Inquire <span>↗</span></button><button className="button button-gold" onClick={() => { setSelectedListing(item); setModalMode('order'); setOrderSent(false); setInquirySent(false); setError(''); }}>Request order <span>↗</span></button></div></div></div>
             </article>
           ))}</div>
@@ -292,6 +293,7 @@ export default function App() {
       </section>
 
       <AccountPanel />
+      <SupplierListingPanel origins={origins} />
       <AdminPanel />
 
       <section className="supplier-section" id="suppliers">
