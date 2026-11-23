@@ -133,7 +133,7 @@ export default function App() {
       return;
     }
     setOrderSent(true);
-    setOrderMessage('Your order request has been sent to MEA BOKO for follow-up. No payment has been taken.');
+    setOrderMessage('Your order request has been created. Sign in to your account to message the supplier and discuss your price. No payment has been taken.');
     formElement.reset();
   }
 
