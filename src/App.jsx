@@ -157,14 +157,45 @@ export default function App() {
 
   async function submitSupplier(event) {
     event.preventDefault();
-    if (!supabase) return;
+    if (!supabase) {
+      setError('The MEA BOKO database is not connected. Please try again later.');
+      return;
+    }
     setBusy(true);
     setError('');
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      setBusy(false);
+      setError('Please sign in to your MEA BOKO account before submitting a supplier application. This lets you track your application and upload business documents.');
+      document.getElementById('account')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    const { data: existingApplication, error: lookupError } = await supabase
+      .from('supplier_applications')
+      .select('id,status')
+      .eq('user_id', user.id)
+      .in('status', ['pending', 'under_review'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) {
+      setBusy(false);
+      setError(lookupError.message);
+      return;
+    }
+    if (existingApplication) {
+      setBusy(false);
+      setSupplierSent(true);
+      setError('');
+      window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
+      return;
+    }
+
     const { error: submitError } = await supabase.from('supplier_applications').insert({
-      user_id: user?.id || null,
+      user_id: user.id,
       contact_person: String(form.get('contact_person') || '').trim(),
       business_name: String(form.get('business_name') || '').trim(),
       email: String(form.get('email') || '').trim(),
@@ -181,6 +212,7 @@ export default function App() {
     }
     setSupplierSent(true);
     formElement.reset();
+    window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
   }
 
   return (
