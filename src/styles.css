@@ -124,3 +124,19 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .trade-document-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .trade-document-form{padding-top:12px;border-top:1px solid #e5e9e1}
 @media(max-width:560px){.trade-document-row{align-items:flex-start;flex-direction:column}.trade-document-actions{justify-content:flex-start}}
+
+
+/* Export operations dashboard */
+.export-operations-panel{margin:16px 0;padding:16px;border:1px solid #e4e9df;border-radius:14px;background:#fbfcf8;display:grid;gap:14px}
+.export-detail-summary{display:grid;gap:7px;padding:12px;border-radius:10px;background:#fff;border:1px solid #e7ebe3}
+.export-detail-summary p{margin:0;font-size:13px;color:#4e5d52;overflow-wrap:anywhere}
+.export-details-editor{border-top:1px solid #e5e9e1;padding-top:10px}
+.export-details-editor summary{cursor:pointer;color:#285a3c;font-size:13px;font-weight:700;padding:6px 0}
+.export-checklist{display:grid;gap:7px;padding-top:10px;border-top:1px solid #e5e9e1}
+.export-check-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;padding:7px 0;border-bottom:1px solid #edf0ea}
+.check-present{color:#267344;font-weight:700}.check-missing{color:#78847b}
+.export-report-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.export-report-stats>div{display:grid;gap:4px;padding:13px;border:1px solid #e5e9e1;border-radius:10px;background:#fbfcf8}
+.export-report-stats b{font-size:19px;color:#234b33}
+.export-report-stats small{font-size:11px;color:#718075}
+@media(max-width:650px){.export-report-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
