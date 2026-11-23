@@ -16,11 +16,12 @@ export default function AdminPanel() {
   const [tradeDocuments, setTradeDocuments] = useState([]);
   const [exportDetails, setExportDetails] = useState([]);
   const [buyerProfiles, setBuyerProfiles] = useState([]);
+  const [paymentRecords, setPaymentRecords] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -46,14 +47,16 @@ export default function AdminPanel() {
         .select('id,order_id,destination_country,destination_port,importer_company,buyer_reference,coffee_variety,grade,process,moisture_percent,crop_year,lot_reference,bag_count,bag_weight_kg,packaging,export_notes,updated_at')
         .order('updated_at', { ascending: false }).limit(200),
       supabase.from('buyer_business_profiles').select('buyer_id,company_name,country,city,business_type,website,preferred_origins,buyer_notes,updated_at').order('updated_at', { ascending: false }).limit(200),
+      supabase.from('order_payment_records').select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at').order('created_at', { ascending: false }).limit(300),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
     setInquiries(inquiriesResult.data || []);
     setOrders(ordersResult.data || []);
     setBuyerProfiles(buyerProfilesResult.data || []);
+    setPaymentRecords(paymentsResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
     setTradeDocuments(tradeDocumentsResult.data || []);
@@ -92,6 +95,18 @@ export default function AdminPanel() {
   useEffect(() => {
     if (admin) loadDashboard();
   }, [admin, loadDashboard]);
+
+  async function reviewPaymentRecord(record, status) {
+    setBusyId(record.id); setError(''); setNotice('');
+    const { data: authData } = await supabase.auth.getUser();
+    const { error: updateError } = await supabase.from('order_payment_records')
+      .update({ status, reviewed_by: authData.user?.id || null, reviewed_at: new Date().toISOString(), review_note: null })
+      .eq('id', record.id).eq('status', 'pending');
+    setBusyId('');
+    if (updateError) { setError(updateError.message); return; }
+    setNotice(status === 'verified' ? 'Payment record marked verified. Confirm funds independently before verification.' : 'Payment record rejected.');
+    await loadDashboard();
+  }
 
   async function reviewTradeDocument(document, status) {
     setBusyId(document.id); setError(''); setNotice('');
@@ -139,6 +154,27 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Trade payment records</h3><span>{paymentRecords.length} entries · {paymentRecords.filter((record) => record.status === 'pending').length} pending review</span></div>
+      {paymentRecords.length ? paymentRecords.map((record) => {
+        const order = orders.find((item) => item.id === record.order_id);
+        return <article className="admin-record" key={record.id}>
+          <div className="admin-record-main"><div><h4>{Number(record.amount).toLocaleString()} {record.currency}</h4><span className={'listing-status status-'+record.status}>{record.status}</span></div>
+            <p>Order {record.order_id.slice(0,8).toUpperCase()} · {order ? Number(order.quantity_kg).toLocaleString()+' kg' : 'Order details unavailable'}</p>
+            <p>{record.payment_stage.replaceAll('_',' ')} · {record.payment_method.replaceAll('_',' ')} · {record.payment_date || 'Date not supplied'}</p>
+            {record.payment_reference && <p>Reference: {record.payment_reference}</p>}
+            {record.notes && <p>{record.notes}</p>}
+            <small>Submitted {new Date(record.created_at).toLocaleString()} · Account {record.submitted_by.slice(0,8).toUpperCase()}</small>
+            {record.review_note && <p>Review note: {record.review_note}</p>}
+          </div>
+          {record.status === 'pending' && <div className="admin-actions">
+            <button className="button button-gold" disabled={busyId===record.id} onClick={() => reviewPaymentRecord(record,'verified')}>Mark verified</button>
+            <button className="admin-danger" disabled={busyId===record.id} onClick={() => reviewPaymentRecord(record,'rejected')}>Reject record</button>
+          </div>}
+        </article>;
+      }) : <p className="admin-empty">No payment records have been submitted yet.</p>}
+      <p className="account-hint">Verification is an internal record status only. Confirm funds with the relevant payment provider or bank before marking a record verified. MEA BOKO does not process these payments.</p>
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>International buyer directory</h3><span>{buyerProfiles.length} profiles</span></div>
