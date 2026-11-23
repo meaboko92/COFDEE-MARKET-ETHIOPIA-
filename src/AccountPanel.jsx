@@ -25,6 +25,7 @@ export default function AccountPanel() {
   const [exportDetails, setExportDetails] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
+  const [quoteDrafts, setQuoteDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
   const [origins, setOrigins] = useState([]);
 
@@ -59,7 +60,7 @@ export default function AccountPanel() {
         .order('created_at', { ascending: true });
       setOrderMessages(messages || []);
       const { data: proposals } = await supabase.from('order_price_proposals')
-        .select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at')
+        .select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at,incoterm,quote_valid_until,freight_per_kg,insurance_per_kg,origin_charges_per_kg,destination_charges_per_kg,quote_notes')
         .in('order_id', participantOrders.map((order) => order.id))
         .order('created_at', { ascending: false });
       setOrderProposals(proposals || []);
@@ -183,14 +184,32 @@ export default function AccountPanel() {
     const body = String(messageDrafts[orderId] || '').trim();
     const rawPrice = String(priceDrafts[orderId] || '').trim();
     const proposedPrice = rawPrice ? Number(rawPrice) : null;
-    if (!body && !rawPrice) return;
+    const quote = quoteDrafts[orderId] || {};
+    const hasQuoteFields = Object.values(quote).some((value) => String(value || '').trim());
+    const order = orders.find((item) => item.id === orderId);
+    const isExportOrder = ['export','both'].includes(order?.coffee_listings?.market);
+    if (!body && !rawPrice && !hasQuoteFields) return;
     if (rawPrice && (!Number.isFinite(proposedPrice) || proposedPrice <= 0)) {
       setError('Enter a price greater than zero, or leave the price field blank.');
       return;
     }
+    if (hasQuoteFields && (!isExportOrder || !rawPrice)) {
+      setError('Add a price per kg to send export quotation terms.');
+      return;
+    }
+    const costFields = ['freight_per_kg','insurance_per_kg','origin_charges_per_kg','destination_charges_per_kg'];
+    const costs = {};
+    for (const field of costFields) {
+      const raw = String(quote[field] || '').trim();
+      const value = raw ? Number(raw) : null;
+      if (value !== null && (!Number.isFinite(value) || value < 0)) {
+        setError('Quotation cost fields must be zero or greater.');
+        return;
+      }
+      costs[field] = value;
+    }
     setMessageBusy((current) => ({ ...current, [orderId]: true }));
     setError('');
-    const order = orders.find((item) => item.id === orderId);
     if (body) {
       const { error: messageError } = await supabase.from('order_messages').insert({
         order_id: orderId, sender_id: user.id, body, currency: order?.currency || 'ETB',
@@ -202,8 +221,18 @@ export default function AccountPanel() {
       }
     }
     if (rawPrice) {
+      const quotePayload = isExportOrder ? {
+        incoterm: quote.incoterm || null,
+        quote_valid_until: quote.quote_valid_until || null,
+        freight_per_kg: costs.freight_per_kg,
+        insurance_per_kg: costs.insurance_per_kg,
+        origin_charges_per_kg: costs.origin_charges_per_kg,
+        destination_charges_per_kg: costs.destination_charges_per_kg,
+        quote_notes: String(quote.quote_notes || '').trim() || null,
+      } : {};
       const { error: proposalError } = await supabase.from('order_price_proposals').insert({
         order_id: orderId, proposer_id: user.id, amount: proposedPrice, currency: order?.currency || 'ETB',
+        ...quotePayload,
       });
       if (proposalError) {
         setMessageBusy((current) => ({ ...current, [orderId]: false }));
@@ -214,10 +243,11 @@ export default function AccountPanel() {
     setMessageBusy((current) => ({ ...current, [orderId]: false }));
     setMessageDrafts((current) => ({ ...current, [orderId]: '' }));
     setPriceDrafts((current) => ({ ...current, [orderId]: '' }));
+    setQuoteDrafts((current) => ({ ...current, [orderId]: {} }));
     const orderIds = orders.map((item) => item.id);
     const [{ data: refreshed }, { data: refreshedProposals }] = await Promise.all([
       supabase.from('order_messages').select('id,order_id,sender_id,body,proposed_price,currency,created_at').in('order_id', orderIds).order('created_at', { ascending: true }),
-      supabase.from('order_price_proposals').select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at').in('order_id', orderIds).order('created_at', { ascending: false }),
+      supabase.from('order_price_proposals').select('id,order_id,proposer_id,amount,currency,status,responded_by,responded_at,created_at,incoterm,quote_valid_until,freight_per_kg,insurance_per_kg,origin_charges_per_kg,destination_charges_per_kg,quote_notes').in('order_id', orderIds).order('created_at', { ascending: false }),
     ]);
     setOrderMessages(refreshed || []);
     setOrderProposals(refreshedProposals || []);
@@ -409,12 +439,15 @@ export default function AccountPanel() {
           const thread = orderMessages.filter((message) => message.order_id === item.id);
           const shipment = orderShipments.find((record) => record.order_id === item.id);
           const receipt = deliveryConfirmations.find((record) => record.order_id === item.id);
+          const isExportOrder = ['export','both'].includes(item.coffee_listings?.market);
+          const quoteDraft = quoteDrafts[item.id] || {};
+          const hasQuoteFields = Object.values(quoteDraft).some((value) => String(value || '').trim());
           return <article className="trade-order-card" key={item.id}>
             <div className="trade-order-head"><div><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{isBuyer ? 'Buyer view' : 'Supplier view'} · {Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></div><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>
             <div className="order-thread">{thread.length ? thread.map((message) => <div className={message.sender_id === user.id ? 'thread-message own-message' : 'thread-message'} key={message.id}><small>{message.sender_id === user.id ? 'You' : 'Trade partner'} · {new Date(message.created_at).toLocaleString()}</small>{message.body && <p>{message.body}</p>}{message.proposed_price !== null && <strong className="price-proposal">Earlier price note: {Number(message.proposed_price).toLocaleString()} {message.currency} / kg</strong>}</div>) : <p className="account-hint">No messages yet. Start the order discussion below.</p>}</div>
             <div className="price-proposal-list"><b>Price proposals</b>{orderProposals.filter((proposal) => proposal.order_id === item.id).length ? orderProposals.filter((proposal) => proposal.order_id === item.id).map((proposal) => {
               const isRecipient = proposal.proposer_id !== user.id;
-              return <div className="price-proposal-card" key={proposal.id}><div><strong>{Number(proposal.amount).toLocaleString()} {proposal.currency} / kg</strong><small>{proposal.proposer_id === user.id ? 'Proposed by you' : 'Proposed by trade partner'} · {new Date(proposal.created_at).toLocaleString()}</small><span className={'listing-status status-'+proposal.status}>{proposal.status}</span></div>{proposal.status === 'pending' && isRecipient && <div className="admin-actions"><button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'accepted')}>Accept price</button><button type="button" className="admin-danger" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'declined')}>Decline</button></div>}</div>;
+              return <div className="price-proposal-card" key={proposal.id}><div><strong>{Number(proposal.amount).toLocaleString()} {proposal.currency} / kg</strong><small>{proposal.proposer_id === user.id ? 'Proposed by you' : 'Proposed by trade partner'} · {new Date(proposal.created_at).toLocaleString()}</small>{proposal.incoterm && <small><b>Delivery term:</b> {proposal.incoterm}{proposal.quote_valid_until ? ' · Valid until '+proposal.quote_valid_until : ''}</small>}{(proposal.freight_per_kg != null || proposal.insurance_per_kg != null || proposal.origin_charges_per_kg != null || proposal.destination_charges_per_kg != null) && <small>Extra per kg — Freight: {proposal.freight_per_kg ?? '—'} · Insurance: {proposal.insurance_per_kg ?? '—'} · Origin: {proposal.origin_charges_per_kg ?? '—'} · Destination: {proposal.destination_charges_per_kg ?? '—'} {proposal.currency}</small>}{proposal.quote_notes && <small>Quote notes: {proposal.quote_notes}</small>}<span className={'listing-status status-'+proposal.status}>{proposal.status}</span></div>{proposal.status === 'pending' && isRecipient && <div className="admin-actions"><button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'accepted')}>Accept price</button><button type="button" className="admin-danger" disabled={Boolean(messageBusy[item.id])} onClick={() => respondToPriceProposal(proposal,'declined')}>Decline</button></div>}</div>;
             }) : <p className="account-hint">No price proposals yet.</p>}</div>
             {item.status === 'confirmed' && <section className="order-delivery-panel">
               <div className="delivery-panel-heading"><b>Delivery tracking</b>{shipment && <span className={'listing-status status-'+shipment.status}>{shipment.status.replaceAll('_',' ')}</span>}</div>
@@ -498,7 +531,13 @@ export default function AccountPanel() {
             </section>}
             <form className="order-message-form" onSubmit={(event) => sendOrderMessage(item.id, event)}>
               <label>Message<textarea rows="2" maxLength="3000" value={messageDrafts[item.id] || ''} onChange={(event) => setMessageDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Discuss quality, delivery, documents or other order details…" /></label>
-              <div className="form-row"><label>Propose price per kg ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim())}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
+              <div className="form-row"><label>Propose price per kg ({item.currency})<input type="number" min="0.01" step="0.01" value={priceDrafts[item.id] || ''} onChange={(event) => setPriceDrafts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Price per kg" /></label><button className="button button-dark" disabled={Boolean(messageBusy[item.id]) || (!String(messageDrafts[item.id] || '').trim() && !String(priceDrafts[item.id] || '').trim() && !hasQuoteFields)}>{messageBusy[item.id] ? 'Sending…' : 'Send message'}</button></div>
+            {isExportOrder && <details className="export-quote-editor"><summary>Add international quotation terms</summary><p className="account-hint">Add these details to the price proposal. Both parties can review them before accepting. Use the Incoterm and named place agreed with the trade partner.</p>
+              <div className="form-row"><label>Incoterm<select value={quoteDraft.incoterm || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || {}), incoterm: event.target.value } }))}><option value="">Select delivery term</option>{['EXW','FCA','CPT','CIP','DAP','DPU','DDP','FAS','FOB','CFR','CIF'].map((term) => <option key={term} value={term}>{term}</option>)}</select></label><label>Quote valid until<input type="date" value={quoteDraft.quote_valid_until || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || {}), quote_valid_until: event.target.value } }))} /></label></div>
+              <div className="form-row">{[['freight_per_kg','Freight / kg'],['insurance_per_kg','Insurance / kg']].map(([field,label]) => <label key={field}>{label} ({item.currency})<input type="number" min="0" step="0.01" value={quoteDraft[field] || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || {}), [field]: event.target.value } }))} /></label>)}</div>
+              <div className="form-row">{[['origin_charges_per_kg','Origin charges / kg'],['destination_charges_per_kg','Destination charges / kg']].map(([field,label]) => <label key={field}>{label} ({item.currency})<input type="number" min="0" step="0.01" value={quoteDraft[field] || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || {}), [field]: event.target.value } }))} /></label>)}</div>
+              <label>Quotation notes<textarea rows="2" maxLength="1500" value={quoteDraft.quote_notes || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || {}), quote_notes: event.target.value } }))} placeholder="Named place, scope of included costs, or other quote conditions…" /></label>
+            </details>}
             </form>
           </article>;
         })}</div> : <p className="account-hint">You have no buyer or supplier trade orders yet.</p>}
