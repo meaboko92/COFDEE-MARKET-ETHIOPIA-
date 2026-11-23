@@ -123,7 +123,5 @@ export default function AdminPanel() {
         <div className="admin-record-main"><div><h4>Order {item.id.slice(0,8).toUpperCase()}</h4><span className={'listing-status status-'+item.status}>{item.status}</span></div><p>Buyer account: {item.buyer_id}</p><p>Listing reference: {item.listing_id}</p><p>Quantity: {Number(item.quantity_kg).toLocaleString()} kg · Agreed price: {item.agreed_price ?? 'Not agreed'} {item.currency}</p><small>{new Date(item.created_at).toLocaleString()}</small></div>
         <div className="admin-actions">{item.status !== 'negotiating' && !['fulfilled','cancelled'].includes(item.status) && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'negotiating')}>Negotiating</button>}{!['confirmed','fulfilled','cancelled'].includes(item.status) && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'confirmed')}>Confirm order</button>}{item.status === 'confirmed' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'fulfilled')}>Mark fulfilled</button>}{!['fulfilled','cancelled'].includes(item.status) && <button className="admin-danger" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'cancelled')}>Cancel</button>}</div>
       </article>) : <p className="admin-empty">No trade orders yet.</p>}
-    </div>
-    </div>
   </section>;
 }
