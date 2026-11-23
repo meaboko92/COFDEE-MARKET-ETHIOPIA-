@@ -17,6 +17,7 @@ export default function AccountPanel() {
   const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
   const [inventoryHistory, setInventoryHistory] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [orders, setOrders] = useState([]);
   const [orderMessages, setOrderMessages] = useState([]);
   const [orderProposals, setOrderProposals] = useState([]);
@@ -116,6 +117,10 @@ export default function AccountPanel() {
       setExportDetails([]);
       setPaymentRecords([]);
     }
+    const { data: notificationRows } = await supabase.from('user_notifications')
+      .select('id,event_type,title,body,entity_id,created_at,read_at')
+      .eq('user_id', currentUser.id).order('created_at', { ascending: false }).limit(30);
+    setNotifications(notificationRows || []);
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
   }, []);
@@ -133,10 +138,35 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
+
+  useEffect(() => {
+    if (!user || !supabase) return undefined;
+    const channel = supabase.channel('user-notifications-' + user.id)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'user_notifications',
+        filter: 'user_id=eq.' + user.id,
+      }, async () => {
+        const { data } = await supabase.from('user_notifications')
+          .select('id,event_type,title,body,entity_id,created_at,read_at')
+          .eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
+        setNotifications(data || []);
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  async function markNotificationRead(notificationId) {
+    if (!user || !supabase) return;
+    const { error: updateError } = await supabase.from('user_notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', notificationId).eq('user_id', user.id).is('read_at', null);
+    if (updateError) { setError(updateError.message); return; }
+    setNotifications((current) => current.map((item) =>
+      item.id === notificationId ? { ...item, read_at: new Date().toISOString() } : item));
+  }
 
   async function submitAuth(event) {
     event.preventDefault();
@@ -170,7 +200,7 @@ export default function AccountPanel() {
     const { error: signOutError } = await supabase.auth.signOut();
     setBusy(false);
     if (signOutError) setError(signOutError.message);
-    else { setUser(null); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
+    else { setUser(null); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setListings([]); setMessage('You have signed out.'); }
   }
 
   async function addListing(event) {
@@ -525,6 +555,13 @@ export default function AccountPanel() {
           <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'} <span>↗</span></button>
         </form>
       </> : <>
+        <section className="account-subsection notification-panel" aria-label="Notifications">
+          <div className="admin-block-head"><h3>Notifications</h3><span>{notifications.filter((item) => !item.read_at).length} unread</span></div>
+          {notifications.length ? <div className="notification-list">{notifications.map((item) => <article className={'notification-item' + (item.read_at ? ' is-read' : ' is-unread')} key={item.id}>
+            <div><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.created_at).toLocaleString()}</small></div>
+            {!item.read_at && <button type="button" className="text-link" onClick={() => markNotificationRead(item.id)}>Mark read</button>}
+          </article>)}</div> : <p className="account-hint">No notifications yet. Trade updates and stock alerts will appear here.</p>}
+        </section>
         <div className="account-user"><div><span className="account-avatar">{(user.email || 'M').slice(0,1).toUpperCase()}</span><div><b>{user.user_metadata?.full_name || user.email}</b><small>{user.email}</small></div></div><button className="text-link" onClick={signOut} disabled={busy}>Sign out</button></div>
         {role === 'buyer' && <section className="buyer-business-panel">
           <h3 className="account-subhead">International buyer profile</h3>
