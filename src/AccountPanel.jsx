@@ -275,7 +275,8 @@ export default function AccountPanel() {
   async function submitPaymentRecord(order, event) {
     event.preventDefault();
     if (!user || !supabase || !['confirmed','fulfilled'].includes(order.status)) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const amount = Number(form.get('amount'));
     if (!Number.isFinite(amount) || amount <= 0) { setError('Enter a payment amount greater than zero.'); return; }
     const payload = {
@@ -294,7 +295,7 @@ export default function AccountPanel() {
     const { error: paymentError } = await supabase.from('order_payment_records').insert(payload);
     setMessageBusy((current) => ({ ...current, [order.id]: false }));
     if (paymentError) { setError(paymentError.message); return; }
-    event.currentTarget.reset();
+    formElement.reset();
     const { data } = await supabase.from('order_payment_records')
       .select('id,order_id,submitted_by,amount,currency,payment_stage,payment_method,payment_reference,payment_date,notes,status,review_note,created_at,reviewed_at')
       .in('order_id', orders.map((item) => item.id)).order('created_at', { ascending: false });
