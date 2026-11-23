@@ -112,3 +112,15 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .shipment-update-form{padding-top:12px;border-top:1px solid #e5e9e1}
 .delivery-confirmed{margin:0;padding:10px 12px;border-radius:9px;background:#eaf4e9;color:#245b37;font-size:13px}
 @media(max-width:560px){.delivery-details,.shipment-form .form-row{grid-template-columns:1fr}.delivery-panel-heading{align-items:flex-start;flex-direction:column}}
+
+
+/* Private export trade documents */
+.trade-documents-panel{margin:16px 0;padding:16px;border:1px solid #e4e9df;border-radius:14px;background:#fbfcf8;display:grid;gap:12px}
+.trade-document-list{display:grid;gap:8px}
+.trade-document-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px;border:1px solid #e7ebe3;border-radius:10px;background:#fff}
+.trade-document-row>div:first-child{display:grid;gap:4px;min-width:0}
+.trade-document-row b{font-size:13px;color:#263b2d}
+.trade-document-row small{font-size:11px;color:#718075;overflow-wrap:anywhere}
+.trade-document-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.trade-document-form{padding-top:12px;border-top:1px solid #e5e9e1}
+@media(max-width:560px){.trade-document-row{align-items:flex-start;flex-direction:column}.trade-document-actions{justify-content:flex-start}}
