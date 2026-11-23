@@ -174,3 +174,9 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .notification-item small{color:#7b887e;font-size:11px}
 .notification-item button{flex:0 0 auto;white-space:nowrap}
 @media(max-width:520px){.notification-item{flex-direction:column}.notification-item button{align-self:flex-start}}
+
+
+/* Administrator account role controls */
+.admin-role-label{display:grid;gap:6px;min-width:150px;font-size:12px;font-weight:700;color:#405247}
+.admin-role-label select{min-height:38px;padding:8px 10px;border:1px solid #d7e0d7;border-radius:8px;background:#fff;color:#233b2d}
+.admin-role-label select:disabled{opacity:.65;cursor:not-allowed}
