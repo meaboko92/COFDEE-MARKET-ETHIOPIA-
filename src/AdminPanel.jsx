@@ -26,7 +26,7 @@ export default function AdminPanel() {
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
-        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,price,currency,status,created_at,origins(name,region)')
+        .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,status,created_at,origins(name,region)')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
@@ -182,6 +182,7 @@ export default function AdminPanel() {
     return { currency, orderValue, verifiedPayments, pendingPayments, outstanding: Math.max(0, orderValue - verifiedPayments), pricedOrderCount, orderCount: currencyOrders.length };
   });
 
+  const lowStockListings = listings.filter((listing) => listing.status === 'approved' && listing.available_quantity_kg != null && Number(listing.available_quantity_kg) <= Number(listing.low_stock_threshold_kg || 0));
   const supplierPerformance = applications.map((supplier) => {
     const supplierListings = listings.filter((listing) => listing.supplier_id === supplier.user_id);
     const listingIds = new Set(supplierListings.map((listing) => listing.id));
@@ -220,6 +221,16 @@ export default function AdminPanel() {
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
       <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Low-stock alerts</h3><span>{lowStockListings.length} listings need attention</span></div>
+      {lowStockListings.length ? lowStockListings.map((listing) => <article className="admin-record" key={listing.id}>
+        <div className="admin-record-main"><h4>{listing.name}</h4>
+          <p>{Number(listing.available_quantity_kg).toLocaleString()} kg available · {Number(listing.reserved_quantity_kg || 0).toLocaleString()} kg reserved · alert threshold {Number(listing.low_stock_threshold_kg || 0).toLocaleString()} kg</p>
+          <p>{listing.origins?.name || 'Origin not set'} · {listing.market}</p>
+        </div>
+      </article>) : <p className="admin-empty">No approved listings are currently below their supplier-set stock thresholds.</p>}
+      <p className="account-hint">Alerts are based on each supplier's threshold and the available quantity after reservations. Dashboard shows the latest 100 listings.</p>
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Supplier performance & coffee inventory</h3><span>{supplierPerformance.length} suppliers with marketplace activity</span></div>
