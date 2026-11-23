@@ -160,3 +160,17 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .buyer-order-context span,.buyer-export-summary span{color:#52645d}
 .buyer-export-summary{background:#f7f8fc;border-color:rgba(27,52,91,.12)}
 .buyer-export-summary b{color:#1d3558}
+
+
+/* In-app notifications */
+.notification-panel{margin:18px 0 24px;padding:16px;border:1px solid #e3e9e2;border-radius:14px;background:#fbfcf8}
+.notification-panel .admin-block-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.notification-panel .admin-block-head h3{margin:0}
+.notification-list{display:grid;gap:8px;margin-top:12px}
+.notification-item{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px;border:1px solid #e5e9e1;border-radius:10px;background:#fff}
+.notification-item.is-unread{border-left:4px solid #d39a32;background:#fffdf7}
+.notification-item.is-read{opacity:.78}
+.notification-item p{margin:5px 0;color:#536258;font-size:13px;line-height:1.45}
+.notification-item small{color:#7b887e;font-size:11px}
+.notification-item button{flex:0 0 auto;white-space:nowrap}
+@media(max-width:520px){.notification-item{flex-direction:column}.notification-item button{align-self:flex-start}}
