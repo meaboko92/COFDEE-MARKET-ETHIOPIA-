@@ -96,3 +96,19 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .price-proposal-card .admin-actions{flex:0 1 auto}
 .price-proposal-card .admin-actions button{white-space:nowrap}
 @media(max-width:520px){.price-proposal-card{align-items:stretch;flex-direction:column}.price-proposal-card .admin-actions{width:100%}.price-proposal-card .admin-actions button{flex:1}}
+
+
+/* Order delivery tracking */
+.order-delivery-panel{margin:16px 0;padding:16px;border:1px solid #e4e9df;border-radius:14px;background:#fbfcf8;display:grid;gap:12px}
+.delivery-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.delivery-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 16px}
+.delivery-details p{margin:0;font-size:13px;color:#4f5d53;overflow-wrap:anywhere}
+.shipment-form{display:grid;gap:12px}
+.shipment-form label{display:grid;gap:6px;font-size:12px;font-weight:650;color:#4d5b50}
+.shipment-form input,.shipment-form select,.shipment-form textarea{width:100%;border:1px solid #dce3d8;border-radius:9px;padding:10px;background:#fff;color:#26342b;font:inherit;font-weight:400}
+.shipment-form textarea{resize:vertical}
+.shipment-form .form-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.shipment-form button{justify-self:start}
+.shipment-update-form{padding-top:12px;border-top:1px solid #e5e9e1}
+.delivery-confirmed{margin:0;padding:10px 12px;border-radius:9px;background:#eaf4e9;color:#245b37;font-size:13px}
+@media(max-width:560px){.delivery-details,.shipment-form .form-row{grid-template-columns:1fr}.delivery-panel-heading{align-items:flex-start;flex-direction:column}}
