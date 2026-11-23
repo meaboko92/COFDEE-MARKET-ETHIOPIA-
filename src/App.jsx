@@ -265,6 +265,31 @@ export default function App() {
         </div>
       </section>
 
+      <section className="featured-coffee section-wrap" id="featured-coffee">
+        <div className="section-head">
+          <div><p className="eyebrow">A TASTE OF ETHIOPIA</p><h2>Featured coffee origins</h2><p>Explore the places behind Ethiopia’s celebrated coffee character. These are origin highlights, not live stock offers.</p></div>
+          <a className="text-link" href="#marketplace">View available listings <span>↗</span></a>
+        </div>
+        <div className="featured-coffee-grid">
+          <article className="featured-coffee-card">
+            <img src="https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=1000&q=85" alt="Freshly roasted coffee beans" loading="lazy" />
+            <div className="featured-coffee-shade"></div><span className="featured-origin-tag">OROMIA</span>
+            <div className="featured-coffee-copy"><p>HIGHLAND CHARACTER</p><h3>Guji</h3><span>Explore coffees from Guji’s distinctive growing communities.</span><a href="#marketplace">Explore listings ↗</a></div>
+          </article>
+          <article className="featured-coffee-card">
+            <img src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=85" alt="Coffee being prepared in a cup" loading="lazy" />
+            <div className="featured-coffee-shade"></div><span className="featured-origin-tag">SIDAMA</span>
+            <div className="featured-coffee-copy"><p>ORIGIN & PROCESS</p><h3>Sidama</h3><span>Discover coffee from Sidama’s producing communities.</span><a href="#marketplace">Explore listings ↗</a></div>
+          </article>
+          <article className="featured-coffee-card">
+            <img src="https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?auto=format&fit=crop&w=1000&q=85" alt="Coffee cherries and coffee beans" loading="lazy" />
+            <div className="featured-coffee-shade"></div><span className="featured-origin-tag">GEDEO</span>
+            <div className="featured-coffee-copy"><p>COFFEE HERITAGE</p><h3>Yirgacheffe</h3><span>Explore Yirgacheffe and nearby Gedeo coffee areas.</span><a href="#marketplace">Explore listings ↗</a></div>
+          </article>
+        </div>
+        <p className="featured-coffee-note">Actual availability, processing method, grade, quantity and price are shown on individual marketplace listings.</p>
+      </section>
+
       <section className="marketplace section-wrap" id="marketplace">
         <div className="section-head">
           <div><p className="eyebrow">THE COFFEE MARKET</p><h2>Explore available coffee</h2><p>Find products by type, market and Ethiopian origin.</p></div>
