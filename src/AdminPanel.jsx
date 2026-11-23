@@ -10,11 +10,12 @@ export default function AdminPanel() {
   const [applications, setApplications] = useState([]);
   const [listings, setListings] = useState([]);
   const [inquiries, setInquiries] = useState([]);
+  const [orders, setOrders] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -24,12 +25,16 @@ export default function AdminPanel() {
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
+      supabase.from('orders')
+        .select('id,buyer_id,listing_id,quantity_kg,agreed_price,currency,status,created_at')
+        .order('created_at', { ascending: false }).limit(100),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
     setInquiries(inquiriesResult.data || []);
+    setOrders(ordersResult.data || []);
   }, []);
 
   const checkAdmin = useCallback(async (currentUser) => {
@@ -79,6 +84,7 @@ export default function AdminPanel() {
   const pendingApplications = applications.filter((item) => item.status === 'pending' || item.status === 'under_review');
   const pendingListings = listings.filter((item) => item.status === 'pending');
   const openInquiries = inquiries.filter((item) => item.status !== 'closed');
+  const activeOrders = orders.filter((item) => !['fulfilled','cancelled'].includes(item.status));
 
   return <section className="admin-section" id="admin">
     <div className="admin-heading"><div><p className="eyebrow">PRIVATE MANAGEMENT</p><h2>MEA BOKO Admin Dashboard</h2><p>Review supplier applications, moderate coffee listings and follow buyer inquiries.</p></div><button className="button button-dark" onClick={loadDashboard}>Refresh dashboard ↻</button></div>
@@ -88,6 +94,7 @@ export default function AdminPanel() {
       <div><strong>{applications.length}</strong><span>Supplier applications</span><small>{pendingApplications.length} awaiting review</small></div>
       <div><strong>{listings.length}</strong><span>Coffee listings</span><small>{pendingListings.length} awaiting approval</small></div>
       <div><strong>{inquiries.length}</strong><span>Buyer inquiries</span><small>{openInquiries.length} open</small></div>
+      <div><strong>{orders.length}</strong><span>Trade orders</span><small>{activeOrders.length} active</small></div>
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Supplier applications</h3><span>{pendingApplications.length} to review</span></div>
@@ -109,6 +116,13 @@ export default function AdminPanel() {
         <div className="admin-record-main"><div><h4>{item.name}</h4><span className={'listing-status status-'+item.status}>{item.status.replace('_',' ')}</span></div><p><a href={'mailto:'+item.email}>{item.email}</a>{item.phone ? ' · '+item.phone : ''}</p><p>{item.message}</p><small>Listing reference: {item.listing_id || 'General inquiry'} · {new Date(item.created_at).toLocaleString()}</small></div>
         <div className="admin-actions">{item.status !== 'in_progress' && item.status !== 'closed' && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'in_progress')}>Mark in progress</button>}{item.status !== 'closed' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('inquiries',item.id,'closed')}>Close inquiry</button>}</div>
       </article>) : <p className="admin-empty">No buyer inquiries yet.</p>}
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Trade order management</h3><span>{activeOrders.length} active</span></div>
+      {orders.length ? orders.map((item) => <article className="admin-record" key={item.id}>
+        <div className="admin-record-main"><div><h4>Order {item.id.slice(0,8).toUpperCase()}</h4><span className={'listing-status status-'+item.status}>{item.status}</span></div><p>Buyer account: {item.buyer_id}</p><p>Listing reference: {item.listing_id}</p><p>Quantity: {Number(item.quantity_kg).toLocaleString()} kg · Agreed price: {item.agreed_price ?? 'Not agreed'} {item.currency}</p><small>{new Date(item.created_at).toLocaleString()}</small></div>
+        <div className="admin-actions">{item.status !== 'negotiating' && !['fulfilled','cancelled'].includes(item.status) && <button className="admin-secondary" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'negotiating')}>Negotiating</button>}{!['confirmed','fulfilled','cancelled'].includes(item.status) && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'confirmed')}>Confirm order</button>}{item.status === 'confirmed' && <button className="button button-gold" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'fulfilled')}>Mark fulfilled</button>}{!['fulfilled','cancelled'].includes(item.status) && <button className="admin-danger" disabled={busyId===item.id} onClick={() => changeStatus('orders',item.id,'cancelled')}>Cancel</button>}</div>
+      </article>) : <p className="admin-empty">No trade orders yet.</p>}
+    </div>
     </div>
   </section>;
 }
