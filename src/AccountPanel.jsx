@@ -47,9 +47,9 @@ export default function AccountPanel() {
       const { data: buyerProfile } = await supabase.from('buyer_business_profiles').select('company_name,country,city,business_type,website,preferred_origins,buyer_notes').eq('buyer_id', currentUser.id).maybeSingle();
       setBuyerBusiness({ company_name: buyerProfile?.company_name || '', country: buyerProfile?.country || '', city: buyerProfile?.city || '', business_type: buyerProfile?.business_type || 'importer', website: buyerProfile?.website || '', preferred_origins: buyerProfile?.preferred_origins || [], buyer_notes: buyerProfile?.buyer_notes || '' });
     } else { setBuyerBusiness({ company_name: '', country: '', city: '', business_type: 'importer', website: '', preferred_origins: [], buyer_notes: '' }); }
-    const { data: application } = await supabase.from('supplier_applications')
-      .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').limit(1).maybeSingle();
-    setApproved(Boolean(application));
+    const { data: verification } = await supabase.from('verified_suppliers')
+      .select('user_id,verified_at').eq('user_id', currentUser.id).maybeSingle();
+    setApproved(Boolean(verification));
     const { data: ownListings } = await supabase.from('coffee_listings')
       .select('id,name,product_type,market,status,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
@@ -578,7 +578,7 @@ export default function AccountPanel() {
             <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Saving…' : 'Save buyer profile'} <span>↗</span></button>
           </form>
         </section>}
-        {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Approved' : 'Approval pending'}</b></div>}
+        {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Verified supplier' : 'Not yet verified'}</b></div>}
         {role === 'admin' ? <div className="notice account-message">Administrator access is active. Use the Admin Dashboard below to manage supplier applications, coffee listings and buyer inquiries.</div> : !approved ? <div className="notice">To publish coffee products, submit the supplier registration form below while signed in. The MEA BOKO team must approve your application before listing tools are enabled.</div> : <>
           <h3 className="account-subhead">Add a coffee listing</h3>
           <form onSubmit={addListing} className="account-form">
