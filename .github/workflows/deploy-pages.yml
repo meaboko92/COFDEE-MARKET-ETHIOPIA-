@@ -29,6 +29,7 @@ jobs:
       - name: Build website
         run: npm run build
         env:
+          # Browser-safe publishable key; database access is restricted by Supabase RLS.
           VITE_SUPABASE_URL: https://mccgqmiatxzrcqczazpm.supabase.co
           VITE_SUPABASE_ANON_KEY: sb_publishable_t3-crKMITKev4Wt6TuqMFw_ycOHUj7o
       - name: Configure GitHub Pages
