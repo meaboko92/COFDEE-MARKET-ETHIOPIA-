@@ -85,3 +85,14 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .order-message-form .form-row label{flex:1}
 .order-message-form button{min-height:44px}
 @media(max-width:520px){.trade-order-card{padding:13px}.trade-order-head{flex-direction:column}.order-message-form .form-row{flex-direction:column;align-items:stretch}.order-message-form .form-row>*{width:100%}.thread-message{max-width:96%}}
+
+
+/* Price proposal acceptance flow */
+.price-proposal-list{display:grid;gap:10px;padding:12px 0;border-top:1px solid #edf0e9}
+.price-proposal-list> b{font-size:13px}
+.price-proposal-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid #e5e8df;border-radius:12px;background:#fbfcf9}
+.price-proposal-card>div:first-child{display:grid;gap:5px}
+.price-proposal-card small{font-size:11px;color:#68736b}
+.price-proposal-card .admin-actions{flex:0 1 auto}
+.price-proposal-card .admin-actions button{white-space:nowrap}
+@media(max-width:520px){.price-proposal-card{align-items:stretch;flex-direction:column}.price-proposal-card .admin-actions{width:100%}.price-proposal-card .admin-actions button{flex:1}}
