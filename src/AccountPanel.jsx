@@ -10,6 +10,7 @@ export default function AccountPanel() {
   const [approved, setApproved] = useState(false);
   const [role, setRole] = useState('buyer');
   const [listings, setListings] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [origins, setOrigins] = useState([]);
 
   const loadAccount = useCallback(async (currentUser) => {
@@ -27,6 +28,10 @@ export default function AccountPanel() {
       .select('id,name,product_type,market,status,quantity_kg,price,currency,created_at')
       .eq('supplier_id', currentUser.id).order('created_at', { ascending: false });
     setListings(ownListings || []);
+    const { data: ownOrders, error: ordersError } = await supabase.from('orders')
+      .select('id,quantity_kg,agreed_price,currency,status,created_at,coffee_listings(name)')
+      .eq('buyer_id', currentUser.id).order('created_at', { ascending: false }).limit(50);
+    setOrders(ordersError ? [] : (ownOrders || []));
     const { data: originRows } = await supabase.from('origins').select('id,name,region').order('name');
     setOrigins(originRows || []);
   }, []);
@@ -44,7 +49,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setListings([]); setRole('buyer'); }
+      else { setApproved(false); setListings([]); setOrders([]); setRole('buyer'); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, [loadAccount]);
@@ -146,6 +151,8 @@ export default function AccountPanel() {
             <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit coffee listing'} <span>↗</span></button>
           </form>
         </>}
+        <h3 className="account-subhead">Your trade orders</h3>
+        {orders.length ? <div className="own-listings">{orders.map((item) => <div key={item.id}><span><b>{item.coffee_listings?.name || 'Coffee order'}</b><small>{Number(item.quantity_kg).toLocaleString()} kg · {item.agreed_price === null ? 'Price to be agreed' : Number(item.agreed_price).toLocaleString()+' '+item.currency}</small></span><span className={'listing-status status-'+item.status}>{item.status.replaceAll('_',' ')}</span></div>)}</div> : <p className="account-hint">You have not submitted any coffee order requests yet.</p>}
         <h3 className="account-subhead">Your coffee listings</h3>
         {listings.length ? <div className="own-listings">{listings.map((item) => <div key={item.id}><span><b>{item.name}</b><small>{item.product_type.replaceAll('_',' ')} · {item.market}</small></span><span className={'listing-status status-'+item.status}>{item.status}</span></div>)}</div> : <p className="account-hint">No coffee listings have been submitted from this account yet.</p>}
       </>}
