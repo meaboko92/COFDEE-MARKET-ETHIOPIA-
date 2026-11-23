@@ -13,11 +13,12 @@ export default function AdminPanel() {
   const [orders, setOrders] = useState([]);
   const [shipments, setShipments] = useState([]);
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
+  const [tradeDocuments, setTradeDocuments] = useState([]);
 
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult] = await Promise.all([
+    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,created_at')
         .order('created_at', { ascending: false }).limit(100),
@@ -36,8 +37,11 @@ export default function AdminPanel() {
       supabase.from('order_delivery_confirmations')
         .select('id,shipment_id,order_id,buyer_id,confirmed_at')
         .order('confirmed_at', { ascending: false }).limit(100),
+      supabase.from('order_trade_documents')
+        .select('id,order_id,uploaded_by,document_type,original_filename,file_path,status,review_note,reviewed_at,created_at')
+        .order('created_at', { ascending: false }).limit(200),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error;
+    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
@@ -45,6 +49,7 @@ export default function AdminPanel() {
     setOrders(ordersResult.data || []);
     setShipments(shipmentsResult.data || []);
     setDeliveryConfirmations(deliveryConfirmationsResult.data || []);
+    setTradeDocuments(tradeDocumentsResult.data || []);
   }, []);
 
   const checkAdmin = useCallback(async (currentUser) => {
@@ -79,6 +84,27 @@ export default function AdminPanel() {
   useEffect(() => {
     if (admin) loadDashboard();
   }, [admin, loadDashboard]);
+
+  async function reviewTradeDocument(document, status) {
+    setBusyId(document.id); setError(''); setNotice('');
+    const response = {
+      status,
+      reviewed_by: status === 'approved' || status === 'rejected' ? (await supabase.auth.getUser()).data.user?.id : null,
+      reviewed_at: status === 'approved' || status === 'rejected' ? new Date().toISOString() : null,
+    };
+    const { error: updateError } = await supabase.from('order_trade_documents')
+      .update(response).eq('id', document.id);
+    setBusyId('');
+    if (updateError) { setError(updateError.message); return; }
+    setNotice('Trade document review updated.');
+    await loadDashboard();
+  }
+
+  async function openTradeDocument(document) {
+    const { data, error: urlError } = await supabase.storage.from('trade-documents').createSignedUrl(document.file_path, 60);
+    if (urlError) { setError(urlError.message); return; }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  }
 
   async function changeStatus(table, id, status) {
     setBusyId(id); setError(''); setNotice('');
@@ -142,6 +168,22 @@ export default function AdminPanel() {
           </div>
         </article>;
       }) : <p className="admin-empty">No shipments have been registered yet. Suppliers can add tracking details after an order is confirmed.</p>}
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Export trade documents</h3><span>{tradeDocuments.length} files · {tradeDocuments.filter((doc) => doc.status === 'uploaded' || doc.status === 'under_review').length} awaiting review</span></div>
+      {tradeDocuments.length ? tradeDocuments.map((doc) => <article className="admin-record" key={doc.id}>
+        <div className="admin-record-main"><div><h4>{doc.original_filename}</h4><span className={'listing-status status-'+doc.status}>{doc.status.replaceAll('_',' ')}</span></div>
+          <p>Order: {doc.order_id.slice(0,8).toUpperCase()} · Type: {doc.document_type.replaceAll('_',' ')}</p>
+          <small>Uploaded {new Date(doc.created_at).toLocaleString()}</small>
+          {doc.review_note && <p>Review note: {doc.review_note}</p>}
+          <button type="button" className="text-link" onClick={() => openTradeDocument(doc)}>Open private file ↗</button>
+        </div>
+        <div className="admin-actions">
+          {doc.status === 'uploaded' && <button className="admin-secondary" disabled={busyId===doc.id} onClick={() => reviewTradeDocument(doc,'under_review')}>Start review</button>}
+          {doc.status !== 'approved' && <button className="button button-gold" disabled={busyId===doc.id} onClick={() => reviewTradeDocument(doc,'approved')}>Approve</button>}
+          {doc.status !== 'rejected' && <button className="admin-danger" disabled={busyId===doc.id} onClick={() => reviewTradeDocument(doc,'rejected')}>Reject</button>}
+        </div>
+      </article>) : <p className="admin-empty">No export documents have been uploaded.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Trade order management</h3><span>{activeOrders.length} active</span></div>
