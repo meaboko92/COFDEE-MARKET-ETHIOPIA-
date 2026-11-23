@@ -28,15 +28,21 @@ export default function AccountPanel() {
   const [quoteDrafts, setQuoteDrafts] = useState({});
   const [messageBusy, setMessageBusy] = useState({});
   const [origins, setOrigins] = useState([]);
+  const [buyerBusiness, setBuyerBusiness] = useState({ company_name: '', country: '', city: '', business_type: 'importer', website: '', preferred_origins: [], buyer_notes: '' });
 
   const loadAccount = useCallback(async (currentUser) => {
     if (!currentUser || !supabase) return;
     const { data: profile } = await supabase.from('profiles').select('id,role').eq('id', currentUser.id).maybeSingle();
-    setRole(profile?.role || 'buyer');
+    const currentRole = profile?.role || 'buyer';
+    setRole(currentRole);
     if (!profile) {
       const fullName = currentUser.user_metadata?.full_name || currentUser.email || 'MEA BOKO member';
       await supabase.from('profiles').insert({ id: currentUser.id, full_name: fullName, role: 'buyer' });
     }
+    if (currentRole === 'buyer') {
+      const { data: buyerProfile } = await supabase.from('buyer_business_profiles').select('company_name,country,city,business_type,website,preferred_origins,buyer_notes').eq('buyer_id', currentUser.id).maybeSingle();
+      setBuyerBusiness({ company_name: buyerProfile?.company_name || '', country: buyerProfile?.country || '', city: buyerProfile?.city || '', business_type: buyerProfile?.business_type || 'importer', website: buyerProfile?.website || '', preferred_origins: buyerProfile?.preferred_origins || [], buyer_notes: buyerProfile?.buyer_notes || '' });
+    } else { setBuyerBusiness({ company_name: '', country: '', city: '', business_type: 'importer', website: '', preferred_origins: [], buyer_notes: '' }); }
     const { data: application } = await supabase.from('supplier_applications')
       .select('id,status').eq('user_id', currentUser.id).eq('status', 'approved').limit(1).maybeSingle();
     setApproved(Boolean(application));
@@ -402,6 +408,30 @@ export default function AccountPanel() {
     setMessage(decision === 'accepted' ? 'Price accepted. The order price is now confirmed.' : 'Price proposal declined.');
   }
 
+
+  async function saveBuyerBusiness(event) {
+    event.preventDefault();
+    if (!user || role !== 'buyer') return;
+    const form = new FormData(event.currentTarget);
+    const payload = {
+      buyer_id: user.id,
+      company_name: String(form.get('company_name') || '').trim() || null,
+      country: String(form.get('country') || '').trim() || null,
+      city: String(form.get('city') || '').trim() || null,
+      business_type: String(form.get('business_type') || 'importer'),
+      website: String(form.get('website') || '').trim() || null,
+      preferred_origins: String(form.get('preferred_origins') || '').split(',').map((value) => value.trim()).filter(Boolean).slice(0, 10),
+      buyer_notes: String(form.get('buyer_notes') || '').trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    setBusy(true); setError(''); setMessage('');
+    const { error: saveError } = await supabase.from('buyer_business_profiles').upsert(payload, { onConflict: 'buyer_id' });
+    setBusy(false);
+    if (saveError) { setError(saveError.message); return; }
+    setBuyerBusiness(payload);
+    setMessage('International buyer profile saved.');
+  }
+
   if (!isSupabaseConfigured) return <section className="account-section" id="account"><div className="account-card"><h2>Member account</h2><p>Supabase connection settings are needed before accounts can be used.</p></div></section>;
 
   return <section className="account-section" id="account">
@@ -419,6 +449,21 @@ export default function AccountPanel() {
         </form>
       </> : <>
         <div className="account-user"><div><span className="account-avatar">{(user.email || 'M').slice(0,1).toUpperCase()}</span><div><b>{user.user_metadata?.full_name || user.email}</b><small>{user.email}</small></div></div><button className="text-link" onClick={signOut} disabled={busy}>Sign out</button></div>
+        {role === 'buyer' && <section className="buyer-business-panel">
+          <h3 className="account-subhead">International buyer profile</h3>
+          <p className="account-hint">Add your company and destination details so suppliers can understand your business when you place an order. This information is shared with a supplier only when you have an order with that supplier.</p>
+          <form className="account-form" onSubmit={saveBuyerBusiness}>
+            <label>Company name<input name="company_name" maxLength="160" defaultValue={buyerBusiness.company_name} placeholder="Company / trading name" /></label>
+            <div className="form-row">
+              <label>Business type<select name="business_type" defaultValue={buyerBusiness.business_type}><option value="importer">Coffee importer</option><option value="roaster">Coffee roaster</option><option value="wholesaler">Wholesaler</option><option value="retailer">Retailer</option><option value="cafe">Cafe</option><option value="other">Other</option></select></label>
+              <label>Country<input name="country" maxLength="100" defaultValue={buyerBusiness.country} placeholder="e.g. Japan" /></label>
+            </div>
+            <div className="form-row"><label>City<input name="city" maxLength="100" defaultValue={buyerBusiness.city} placeholder="City" /></label><label>Website (optional)<input name="website" type="url" maxLength="250" defaultValue={buyerBusiness.website} placeholder="https://example.com" /></label></div>
+            <label>Preferred coffee origins<input name="preferred_origins" defaultValue={(buyerBusiness.preferred_origins || []).join(', ')} placeholder="Guji, Sidama, Yirgacheffe" /></label>
+            <label>Business notes (optional)<textarea name="buyer_notes" rows="2" maxLength="1200" defaultValue={buyerBusiness.buyer_notes} placeholder="Tell suppliers about your buying interests…" /></label>
+            <button className="button button-gold form-submit" disabled={busy}>{busy ? 'Saving…' : 'Save buyer profile'} <span>↗</span></button>
+          </form>
+        </section>}
         {role === 'admin' ? <div className="supplier-status"><span className="status-dot live" />Account access: <b>Administrator</b></div> : <div className="supplier-status"><span className={approved ? 'status-dot live' : 'status-dot'} />Supplier status: <b>{approved ? 'Approved' : 'Approval pending'}</b></div>}
         {role === 'admin' ? <div className="notice account-message">Administrator access is active. Use the Admin Dashboard below to manage supplier applications, coffee listings and buyer inquiries.</div> : !approved ? <div className="notice">To publish coffee products, submit the supplier registration form below while signed in. The MEA BOKO team must approve your application before listing tools are enabled.</div> : <>
           <h3 className="account-subhead">Add a coffee listing</h3>
