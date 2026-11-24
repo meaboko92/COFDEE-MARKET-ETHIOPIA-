@@ -41,6 +41,15 @@ Supplier product photos use the `coffee-product-photos` Storage bucket. It is co
 
 For database changes, use reviewed, version-controlled Supabase migrations. Do not paste an old schema over the live database.
 
+## Payment methods and payment records
+
+- Administrators can register, activate, pause and remove MEA BOKO payment methods in the Payment Options section.
+- Only active methods are shown publicly. Account name, payment reference and instructions become visible when a method is activated.
+- Register only MEA BOKO business-owned or officially authorized payment destinations. Never enter PINs, passwords, card details, bank logins or provider private keys.
+- Buyer and supplier payment submissions record payments made outside the site; they do not transfer money. Administrators must independently confirm cleared funds.
+- New payment records default to `pending` and appear in the administrator review queue.
+- Chapa hosted checkout is not enabled in this release. A merchant account, server-side test key, backend initialization and server-side verification are required before online checkout can be enabled. Never place a Chapa private key in frontend code or a `VITE_` variable.
+
 ## Deploy
 
 The site is configured for GitHub Pages:
