@@ -4,6 +4,7 @@ import AccountPanel from './AccountPanel';
 import PaymentMethodsPanel from './PaymentMethodsPanel';
 import PaymentAvailability from './PaymentAvailability';
 import AdminPanel from './AdminPanel';
+import ExecutiveDashboard from './ExecutiveDashboard';
 import SupplierListingPanel from './SupplierListingPanel';
 import MarketAssistant from './MarketAssistant';
 
@@ -338,6 +339,7 @@ export default function App() {
       <PaymentAvailability />
       <PaymentMethodsPanel />
       <SupplierListingPanel origins={origins} />
+      <ExecutiveDashboard />
       <AdminPanel />
 
       <section className="supplier-section" id="suppliers">
