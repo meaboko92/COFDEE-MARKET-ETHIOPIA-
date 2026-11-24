@@ -277,7 +277,7 @@ Deno.serve(async (req: Request) => {
         ? "ወደ MEA BOKO የቡና ገበያ እንኳን በደህና መጡ ☕"
         : lang === "om"
         ? "Gara gabaa buna MEA BOKO baga nagaan dhuftan ☕"
-        : "Welcome to MEA BOKO Coffee Marketplace ☕\nConnect with Ethiopian coffee suppliers, buyers and exporters.";
+        : "☕ WELCOME TO MEA BOKO (MB) DIGITAL COFFEE MARKET!\n\n🌍 Your trusted B2B platform for domestic and international coffee trading.\n\nConnect with Ethiopian coffee farmers, suppliers, cooperatives, processors, exporters, importers, buyers and brokers.\n\n🌱 Offer local coffee\n🌍 Browse coffee for export\n🛒 Explore the full marketplace\n📦 Discover export and import opportunities\n📝 Register as a supplier\n🏭 Connect with processing and washing stations\n\nOur mission: Connecting Ethiopian Coffee to the World!\n\nMEA BOKO (MB) — Connecting Coffee, Creating Opportunities.";
       await send(chatId, welcome + "\n\nChoose an option:", true);
       return new Response("ok");
     }
