@@ -27,6 +27,7 @@ export default function AccountPanel() {
   const [deliveryConfirmations, setDeliveryConfirmations] = useState([]);
   const [tradeDocuments, setTradeDocuments] = useState([]);
   const [paymentRecords, setPaymentRecords] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [exportDetails, setExportDetails] = useState([]);
   const [messageDrafts, setMessageDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
@@ -41,6 +42,9 @@ export default function AccountPanel() {
     const { data: profile } = await supabase.from('profiles').select('id,role').eq('id', currentUser.id).maybeSingle();
     const currentRole = profile?.role || 'buyer';
     setRole(currentRole);
+    const { data: activePaymentMethods } = await supabase.from('payment_methods')
+      .select('provider_code,display_name,currency').eq('is_active', true).order('sort_order').order('display_name');
+    setPaymentMethods(activePaymentMethods || []);
     if (!profile) {
       const fullName = currentUser.user_metadata?.full_name || currentUser.email || 'MEA BOKO member';
       await supabase.from('profiles').insert({ id: currentUser.id, full_name: fullName, role: 'buyer' });
@@ -151,7 +155,7 @@ export default function AccountPanel() {
       if (!mounted) return;
       setUser(session?.user || null);
       if (session?.user) loadAccount(session.user);
-      else { setApproved(false); setSupplierApplication(null); setVerificationDocs([]); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setRole('buyer'); }
+      else { setApproved(false); setSupplierApplication(null); setVerificationDocs([]); setListings([]); setNotifications([]); setInventoryHistory([]); setOrders([]); setOrderMessages([]); setOrderProposals([]); setOrderShipments([]); setDeliveryConfirmations([]); setTradeDocuments([]); setExportDetails([]); setPaymentRecords([]); setPaymentMethods([]); setRole('buyer'); }
     });
     const refreshSupplierApplication = async () => {
       const { data } = await supabase.auth.getUser();
@@ -713,7 +717,7 @@ export default function AccountPanel() {
               ))}
               {['confirmed','fulfilled'].includes(item.status) && <form className="shipment-form" onSubmit={(event) => submitPaymentRecord(item,event)}>
                 <div className="form-row"><label>Amount ({item.currency})<input name="amount" type="number" min="0.01" step="0.01" required placeholder="Payment amount" /></label><label>Payment stage<select name="payment_stage"><option value="deposit">Deposit</option><option value="balance">Balance</option><option value="full_payment">Full payment</option><option value="other">Other</option></select></label></div>
-                <div className="form-row"><label>Method<select name="payment_method"><option value="bank_transfer">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></select></label><label>Payment date<input name="payment_date" type="date" /></label></div>
+                <div className="form-row"><label>Method<select name="payment_method">{paymentMethods.filter((method) => method.currency === item.currency).length ? paymentMethods.filter((method) => method.currency === item.currency).map((method) => <option key={method.provider_code} value={method.provider_code}>{method.display_name}</option>) : <><option value="bank_transfer">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></>}</select></label><label>Payment date<input name="payment_date" type="date" /></label></div>
                 <label>Payment reference (optional)<input name="payment_reference" maxLength="180" placeholder="Reference from your provider" /></label>
                 <label>Notes (optional)<textarea name="notes" rows="2" maxLength="1200" placeholder="Additional information for the reviewer" /></label>
                 <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Submitting…' : 'Submit payment record'}</button>
