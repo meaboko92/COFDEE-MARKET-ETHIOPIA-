@@ -163,41 +163,10 @@ export default function App() {
       setError('The MEA BOKO database is not connected. Please try again later.');
       return;
     }
-    setBusy(true);
-    setError('');
+
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      setBusy(false);
-      setError('Please sign in to your MEA BOKO account before submitting a supplier application. This lets you track your application and upload business documents.');
-      document.getElementById('account')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    const { data: existingApplication, error: lookupError } = await supabase
-      .from('supplier_applications')
-      .select('id,status')
-      .eq('user_id', user.id)
-      .in('status', ['pending', 'under_review'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (lookupError) {
-      setBusy(false);
-      setError(lookupError.message);
-      return;
-    }
-    if (existingApplication) {
-      setBusy(false);
-      setSupplierSent(true);
-      setError('');
-      window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
-      return;
-    }
-
-    const { error: submitError } = await supabase.from('supplier_applications').insert({
-      user_id: user.id,
+    const application = {
       contact_person: String(form.get('contact_person') || '').trim(),
       business_name: String(form.get('business_name') || '').trim(),
       email: String(form.get('email') || '').trim(),
@@ -206,15 +175,61 @@ export default function App() {
       market_interest: String(form.get('market_interest') || ''),
       coffee_details: String(form.get('coffee_details') || '').trim() || null,
       status: 'pending',
-    });
-    setBusy(false);
-    if (submitError) {
-      setError(submitError.message);
+    };
+
+    if (!application.contact_person || !application.business_name || !application.email ||
+        !application.phone || !application.business_role || !application.market_interest) {
+      setError('Complete all required supplier registration fields before submitting.');
       return;
     }
-    setSupplierSent(true);
-    formElement.reset();
-    window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
+
+    setBusy(true);
+    setError('');
+    try {
+      // Supplier applications are also open to guests. The database INSERT policy
+      // permits anonymous rows only when user_id is NULL.
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const user = authData?.user || null;
+      if (authError && !String(authError.message || '').toLowerCase().includes('session')) {
+        console.warn('MEA BOKO optional sign-in lookup:', authError.message);
+      }
+
+      if (user) {
+        const { data: existingApplication, error: lookupError } = await supabase
+          .from('supplier_applications')
+          .select('id,status')
+          .eq('user_id', user.id)
+          .in('status', ['pending', 'under_review'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (lookupError) throw lookupError;
+        if (existingApplication) {
+          setSupplierSent(true);
+          window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
+          return;
+        }
+        application.user_id = user.id;
+      } else {
+        application.user_id = null;
+      }
+
+      const { error: submitError } = await supabase
+        .from('supplier_applications')
+        .insert(application);
+
+      if (submitError) throw submitError;
+
+      setSupplierSent(true);
+      formElement.reset();
+      window.dispatchEvent(new CustomEvent('mea-boko-supplier-application-updated'));
+    } catch (submitError) {
+      console.error('MEA BOKO supplier application failed:', submitError);
+      setError(submitError?.message || 'Your application could not be submitted. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
