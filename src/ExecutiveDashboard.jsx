@@ -31,9 +31,13 @@ export default function ExecutiveDashboard() {
   const [data,setData] = useState({ suppliers:[], listings:[], orders:[], inquiries:[], payments:[], exports:[] });
   const t = words[language];
 
-  const checkAccess = useCallback(async () => {
+  const checkAccess = useCallback(async (sessionUser) => {
     if (!supabase) { setChecking(false); return; }
-    const { data:{ user: currentUser } } = await supabase.auth.getUser();
+    let currentUser = sessionUser;
+    if (typeof sessionUser === 'undefined') {
+      const { data:{ user: fetchedUser } } = await supabase.auth.getUser();
+      currentUser = fetchedUser;
+    }
     setUser(currentUser || null);
     if (!currentUser) { setIsAdmin(false); setChecking(false); return; }
     const { data: profile, error: profileError } = await supabase.from('profiles').select('role').eq('id',currentUser.id).maybeSingle();
@@ -61,7 +65,7 @@ export default function ExecutiveDashboard() {
     setLoading(false);
   },[isAdmin,t.error]);
 
-  useEffect(()=>{ checkAccess(); const {data:listener}=supabase?.auth.onAuthStateChange(()=>{checkAccess();}); return ()=>listener?.subscription?.unsubscribe(); },[checkAccess]);
+  useEffect(()=>{ checkAccess(); const {data:listener}=supabase?.auth.onAuthStateChange((_event,session)=>{checkAccess(session?.user||null);}); return ()=>listener?.subscription?.unsubscribe(); },[checkAccess]);
   useEffect(()=>{ if(isAdmin) loadData(); },[isAdmin,loadData]);
 
   const stats=useMemo(()=>({
