@@ -249,7 +249,7 @@ export default function App() {
           <p className="eyebrow">FROM ETHIOPIA, TO THE WORLD</p>
           <h1>Great coffee.<br /><em>Closer connections.</em></h1>
           <p className="hero-intro">MEA BOKO connects Ethiopian coffee farmers, producers, suppliers, brokers, exporters and buyers — serving domestic trade and international markets across Ethiopia’s diverse coffee-growing regions.</p>
-          <div className="hero-actions"><a className="button button-gold" href="#marketplace">Explore coffee <span>↓</span></a><a className="text-link" href="#suppliers">Become a supplier <span>↗</span></a></div>
+          <div className="hero-actions"><a className="button button-gold" href="#marketplace">Explore coffee <span>↓</span></a><a className="text-link" href="#suppliers">Become a supplier <span>↗</span></a><a className="text-link" href="https://t.me/Miebokocoffeemarketbot" target="_blank" rel="noreferrer">Open Coffee Bot ↗</a></div>
           <div className="hero-proof"><span>OROMIA</span><i /> <span>SIDAMA</span><i /> <span>GEDEO</span><i /> <span>AND MORE</span></div>
         </div>
         <div className="hero-art" aria-label="Ethiopian coffee beans and coffee leaves">
