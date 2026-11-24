@@ -382,7 +382,7 @@ async function createCheckout(admin: ReturnType<typeof createClient>, user: { id
     // This is the documented Telebirr receiveCode format consumed by startPay.
     const rawRequest = [
       "TELEBIRR", "BUYGOODS", c.merchantCode,
-      (amountMinor / 100).toFixed(2), prepayId, "30m",
+      (amountMinor / 100).toFixed(2) + " " + prepayId, "30m",
     ].join("$");
 
     const { error: updateError } = await admin.from("payment_transactions")
