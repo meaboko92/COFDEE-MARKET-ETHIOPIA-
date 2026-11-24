@@ -10,6 +10,8 @@ export default function AdminPanel() {
   const [notice, setNotice] = useState('');
   const [applications, setApplications] = useState([]);
   const [listings, setListings] = useState([]);
+  const [telegramCoffeeOffers, setTelegramCoffeeOffers] = useState([]);
+  const [coffeeOfferNotes, setCoffeeOfferNotes] = useState({});
   const [inquiries, setInquiries] = useState([]);
   const [orders, setOrders] = useState([]);
   const [shipments, setShipments] = useState([]);
@@ -29,12 +31,15 @@ export default function AdminPanel() {
   const loadDashboard = useCallback(async () => {
     if (!supabase) return;
     setError('');
-    const [appsResult, listingsResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult, supplierAuditResult, verificationDocumentsResult, verificationAuditResult] = await Promise.all([
+    const [appsResult, listingsResult, telegramOffersResult, inquiriesResult, ordersResult, shipmentsResult, deliveryConfirmationsResult, tradeDocumentsResult, exportDetailsResult, buyerProfilesResult, paymentsResult, profilesResult, roleAuditResult, supplierAuditResult, verificationDocumentsResult, verificationAuditResult] = await Promise.all([
       supabase.from('supplier_applications')
         .select('id,user_id,contact_person,business_name,email,phone,business_role,market_interest,coffee_details,status,review_note,reviewed_by,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('coffee_listings')
         .select('id,supplier_id,name,product_type,market,process,grade,quantity_kg,reserved_quantity_kg,available_quantity_kg,low_stock_threshold_kg,price,currency,status,created_at,photo_url,origins(name,region)')
+        .order('created_at', { ascending: false }).limit(100),
+      supabase.from('telegram_coffee_offers')
+        .select('id,contact_name,contact_phone,business_name,coffee_name,origin,process,grade,quantity_kg,market,asking_price,currency,status,review_note,reviewed_by,reviewed_at,created_at')
         .order('created_at', { ascending: false }).limit(100),
       supabase.from('inquiries')
         .select('id,listing_id,name,email,phone,message,status,created_at')
@@ -62,10 +67,11 @@ export default function AdminPanel() {
       supabase.from('supplier_verification_documents').select('id,user_id,application_id,document_type,file_path,original_file_name,mime_type,file_size_bytes,status,review_note,reviewed_at,created_at').order('created_at', { ascending: false }).limit(200),
       supabase.from('supplier_verification_document_audit').select('id,document_id,actor_user_id,old_status,new_status,review_note,created_at').order('created_at', { ascending: false }).limit(100),
     ]);
-    const firstError = appsResult.error || listingsResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error || supplierAuditResult.error || verificationDocumentsResult.error || verificationAuditResult.error;
+    const firstError = appsResult.error || listingsResult.error || telegramOffersResult.error || inquiriesResult.error || ordersResult.error || shipmentsResult.error || deliveryConfirmationsResult.error || tradeDocumentsResult.error || exportDetailsResult.error || buyerProfilesResult.error || paymentsResult.error || profilesResult.error || roleAuditResult.error || supplierAuditResult.error || verificationDocumentsResult.error || verificationAuditResult.error;
     if (firstError) setError(firstError.message);
     setApplications(appsResult.data || []);
     setListings(listingsResult.data || []);
+    setTelegramCoffeeOffers(telegramOffersResult.data || []);
     setInquiries(inquiriesResult.data || []);
     setOrders(ordersResult.data || []);
     setBuyerProfiles(buyerProfilesResult.data || []);
@@ -219,6 +225,25 @@ export default function AdminPanel() {
     await loadDashboard();
   }
 
+  async function reviewTelegramCoffeeOffer(offer, status) {
+    setBusyId(offer.id); setError(''); setNotice('');
+    const { data: authData } = await supabase.auth.getUser();
+    const { error: updateError } = await supabase.from('telegram_coffee_offers')
+      .update({
+        status,
+        review_note: (coffeeOfferNotes[offer.id] || '').trim() || null,
+        reviewed_by: authData.user?.id || null,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', offer.id);
+    setBusyId('');
+    if (updateError) { setError(updateError.message); return; }
+    setNotice(status === 'approved' ? 'Coffee offer approved and now visible to exporters in Telegram.' : status === 'rejected' ? 'Coffee offer rejected.' : 'Coffee offer closed.');
+    setCoffeeOfferNotes((current) => ({ ...current, [offer.id]: '' }));
+    await loadDashboard();
+  }
+
   async function changeStatus(table, id, status) {
     setBusyId(id); setError(''); setNotice('');
     const { error: updateError } = await supabase.from(table).update({ status }).eq('id', id);
@@ -232,6 +257,7 @@ export default function AdminPanel() {
 
   const pendingApplications = applications.filter((item) => item.status === 'pending' || item.status === 'under_review');
   const pendingListings = listings.filter((item) => item.status === 'pending');
+  const pendingTelegramCoffeeOffers = telegramCoffeeOffers.filter((item) => item.status === 'pending');
   const openInquiries = inquiries.filter((item) => item.status !== 'closed');
   const activeOrders = orders.filter((item) => !['fulfilled','cancelled'].includes(item.status));
 
@@ -411,6 +437,26 @@ export default function AdminPanel() {
         const application = applications.find((item) => item.id === document?.application_id);
         return <article className="admin-record" key={entry.id}><div className="admin-record-main"><b>{application?.business_name || 'Supplier document'}</b><p>{entry.old_status || 'pending'} → {entry.new_status}</p>{entry.review_note && <p>Note: {entry.review_note}</p>}<small>Administrator {entry.actor_user_id?.slice(0,8).toUpperCase() || 'unknown'} · {new Date(entry.created_at).toLocaleString()}</small></div></article>;
       }) : <p className="admin-empty">No business document review actions recorded yet.</p>}
+    </div>
+    <div className="admin-block">
+      <div className="admin-block-head"><h3>Telegram local coffee offers for exporters</h3><span>{pendingTelegramCoffeeOffers.length} awaiting review · {telegramCoffeeOffers.length} total</span></div>
+      <p className="account-hint">Offers submitted through the MEA BOKO Telegram bot stay private until approved. Approving an offer publishes it in the bot's exporter browse results. Contact details are shown only in this administrator dashboard.</p>
+      {telegramCoffeeOffers.length ? telegramCoffeeOffers.map((offer) => <article className="admin-record" key={offer.id}>
+        <div className="admin-record-main">
+          <div><h4>{offer.coffee_name}</h4><span className={'listing-status status-'+offer.status}>{offer.status.replaceAll('_',' ')}</span></div>
+          <p><strong>Origin:</strong> {offer.origin} · <strong>Process:</strong> {offer.process} · <strong>Grade:</strong> {offer.grade || 'Not specified'}</p>
+          <p><strong>Quantity:</strong> {Number(offer.quantity_kg).toLocaleString()} kg · <strong>Market:</strong> {offer.market} · <strong>Asking:</strong> {offer.asking_price == null ? 'Negotiable' : Number(offer.asking_price).toLocaleString()+' '+offer.currency+'/kg'}</p>
+          <p><strong>Supplier:</strong> {offer.business_name || 'Not provided'} · <strong>Contact:</strong> {offer.contact_name}{offer.contact_phone ? ' · '+offer.contact_phone : ''}</p>
+          <small>Offer ID: {offer.id} · Submitted {new Date(offer.created_at).toLocaleString()}</small>
+          {offer.reviewed_at && <small>Reviewed {new Date(offer.reviewed_at).toLocaleString()}{offer.review_note ? ' · Note: '+offer.review_note : ''}</small>}
+        </div>
+        <div className="admin-actions">
+          <label className="application-review-note">Administrator review note<textarea rows="2" maxLength="1000" value={coffeeOfferNotes[offer.id] ?? offer.review_note ?? ''} onChange={(event) => setCoffeeOfferNotes((current) => ({ ...current, [offer.id]: event.target.value }))} placeholder="Optional verification or quality note" /></label>
+          {offer.status !== 'approved' && offer.status !== 'closed' && <button className="button button-gold" disabled={busyId===offer.id} onClick={() => reviewTelegramCoffeeOffer(offer,'approved')}>Approve for exporters</button>}
+          {offer.status !== 'rejected' && offer.status !== 'closed' && <button className="admin-danger" disabled={busyId===offer.id} onClick={() => reviewTelegramCoffeeOffer(offer,'rejected')}>Reject offer</button>}
+          {offer.status === 'approved' && <button className="admin-secondary" disabled={busyId===offer.id} onClick={() => reviewTelegramCoffeeOffer(offer,'closed')}>Close offer</button>}
+        </div>
+      </article>) : <p className="admin-empty">No Telegram coffee offers have been submitted yet.</p>}
     </div>
     <div className="admin-block">
       <div className="admin-block-head"><h3>Coffee listing moderation</h3><span>{pendingListings.length} to review</span></div>
