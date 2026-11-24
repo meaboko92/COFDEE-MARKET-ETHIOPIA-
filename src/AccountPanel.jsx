@@ -51,10 +51,11 @@ export default function AccountPanel() {
     } else { setBuyerBusiness({ company_name: '', country: '', city: '', business_type: 'importer', website: '', preferred_origins: [], buyer_notes: '' }); }
     const { data: verification } = await supabase.from('verified_suppliers')
       .select('user_id,verified_at').eq('user_id', currentUser.id).maybeSingle();
-    setApproved(Boolean(verification));
     const { data: latestApplication } = await supabase.from('supplier_applications')
       .select('id,business_name,status,created_at').eq('user_id', currentUser.id)
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    // Keep the account dashboard and product-upload panel on the same approval rule.
+    setApproved(Boolean(verification && latestApplication?.status === 'approved'));
     setSupplierApplication(latestApplication || null);
     if (latestApplication) {
       const { data: documents } = await supabase.from('supplier_verification_documents')
