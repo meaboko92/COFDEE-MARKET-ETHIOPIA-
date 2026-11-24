@@ -17,28 +17,42 @@ export default function SupplierListingPanel({ origins = [] }) {
   useEffect(() => {
     if (!supabase) { setChecking(false); return; }
     let mounted = true;
-    async function checkSupplier() {
+    async function checkSupplier(sessionUser) {
       setChecking(true);
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      let currentUser = sessionUser;
+      if (typeof sessionUser === 'undefined') {
+        const { data: { user } } = await supabase.auth.getUser();
+        currentUser = user;
+      }
       if (!mounted) return;
       setUser(currentUser || null);
       if (currentUser) {
-        const { data, error: applicationError } = await supabase
-          .from('supplier_applications')
-          .select('id')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'approved')
-          .limit(1)
-          .maybeSingle();
+        const [applicationResult, verificationResult] = await Promise.all([
+          supabase.from('supplier_applications')
+            .select('id')
+            .eq('user_id', currentUser.id)
+            .eq('status', 'approved')
+            .limit(1)
+            .maybeSingle(),
+          supabase.from('verified_suppliers')
+            .select('user_id')
+            .eq('user_id', currentUser.id)
+            .maybeSingle(),
+        ]);
         if (!mounted) return;
-        setApproved(Boolean(data) && !applicationError);
+        setApproved(Boolean(applicationResult.data && verificationResult.data) &&
+          !applicationResult.error && !verificationResult.error);
       } else {
         setApproved(false);
       }
       setChecking(false);
     }
     checkSupplier();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => { checkSupplier(); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Use the session supplied by the auth event; do not call Supabase auth again
+      // from inside its own state-change callback.
+      checkSupplier(session?.user || null);
+    });
     const refresh = () => checkSupplier();
     window.addEventListener('mea-boko-supplier-application-updated', refresh);
     return () => {
@@ -80,13 +94,14 @@ export default function SupplierListingPanel({ origins = [] }) {
     setError('');
     setMessage('');
     if (!supabase || !user) { setError('Please sign in before submitting a coffee listing.'); return; }
-    if (!approved) { setError('Your supplier application must be approved before you can submit coffee products.'); return; }
+    if (!approved) { setError('Your supplier application and business verification must both be approved before you can submit coffee products.'); return; }
     if (!file) { setError('Please add at least one coffee product photo.'); return; }
 
+    const formElement = event.currentTarget;
     setBusy(true);
     let uploadedPath = '';
     try {
-      const form = new FormData(event.currentTarget);
+      const form = new FormData(formElement);
       const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
       const unique = globalThis.crypto?.randomUUID?.() || String(Date.now());
       uploadedPath = `${user.id}/${unique}.${extension}`;
@@ -115,7 +130,7 @@ export default function SupplierListingPanel({ origins = [] }) {
       if (insertError) throw insertError;
       setMessage('Coffee listing submitted with its photo. It will appear in the marketplace after administrator approval.');
       setFile(null);
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (submitError) {
       if (uploadedPath) await supabase.storage.from('coffee-product-photos').remove([uploadedPath]);
       setError(submitError.message || 'Could not submit this coffee listing.');
@@ -130,7 +145,7 @@ export default function SupplierListingPanel({ origins = [] }) {
       {!isSupabaseConfigured ? <div className="notice">The MEA BOKO database is not configured.</div>
         : checking ? <p className="account-hint">Checking supplier access…</p>
         : !user ? <div className="notice">Sign in to your MEA BOKO account to submit a coffee product.</div>
-        : !approved ? <div className="notice">Your supplier application must be approved before product listing is enabled. You can still submit your supplier application in the section below.</div>
+        : !approved ? <div className="notice">Your supplier application and business verification must both be approved before product listing is enabled. You can still submit your supplier application and verification documents below.</div>
         : <form className="supplier-product-form" onSubmit={submitListing}>
           <div className="form-row">
             <label>Product name<input name="name" required maxLength="120" placeholder="e.g. Guji Hambela Grade 1" /></label>
