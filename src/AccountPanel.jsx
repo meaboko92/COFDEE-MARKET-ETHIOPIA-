@@ -143,6 +143,26 @@ export default function AccountPanel() {
   }, []);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const merchantReference = url.searchParams.get('mb_payment');
+    if (!merchantReference || !user || !supabase) return;
+    url.searchParams.delete('mb_payment');
+    window.history.replaceState({}, '', url.toString());
+    let active = true;
+    async function verifyReturnedPayment() {
+      setMessage('Checking the Chapa payment with the provider…');
+      const { data, error: verifyError } = await supabase.functions.invoke('mea-boko-payments', {
+        body: { action: 'verify_payment', merchant_reference: merchantReference },
+      });
+      if (!active) return;
+      setMessage(data?.message || data?.error || verifyError?.message || 'Payment verification is pending. Do not treat the order as paid.');
+      if (data?.status === 'success') await loadAccount(user);
+    }
+    verifyReturnedPayment();
+    return () => { active = false; };
+  }, [user, loadAccount]);
+
+  useEffect(() => {
     if (!supabase) return undefined;
     async function refreshPaymentMethods() {
       const { data } = await supabase.from('payment_methods')
@@ -409,6 +429,29 @@ export default function AccountPanel() {
     ]);
     setOrderMessages(refreshed || []);
     setOrderProposals(refreshedProposals || []);
+  }
+
+  async function startChapaCheckout(order, formElement) {
+    if (!user || !supabase || !formElement) return;
+    const form = new FormData(formElement);
+    const amount = Number(form.get('amount'));
+    const paymentStage = String(form.get('payment_stage') || 'full_payment');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a payment amount greater than zero.');
+      return;
+    }
+    setMessageBusy((current) => ({ ...current, [order.id]: true }));
+    setError('');
+    setMessage('');
+    const { data, error: checkoutError } = await supabase.functions.invoke('mea-boko-payments', {
+      body: { action: 'create_checkout', order_id: order.id, amount, payment_stage: paymentStage },
+    });
+    setMessageBusy((current) => ({ ...current, [order.id]: false }));
+    if (checkoutError || !data?.checkout_url) {
+      setError(data?.error || checkoutError?.message || 'Chapa checkout could not be started. Please try again.');
+      return;
+    }
+    window.location.assign(data.checkout_url);
   }
 
   async function submitPaymentRecord(order, event) {
@@ -731,6 +774,7 @@ export default function AccountPanel() {
                 <div className="form-row"><label>Method<select name="payment_method">{paymentMethods.filter((method) => method.currency === item.currency).length ? paymentMethods.filter((method) => method.currency === item.currency).map((method) => <option key={method.provider_code} value={method.provider_code}>{method.display_name}</option>) : <><option value="bank_transfer">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></>}</select></label><label>Payment date<input name="payment_date" type="date" /></label></div>
                 <label>Payment reference (optional)<input name="payment_reference" maxLength="180" placeholder="Reference from your provider" /></label>
                 <label>Notes (optional)<textarea name="notes" rows="2" maxLength="1200" placeholder="Additional information for the reviewer" /></label>
+                {paymentMethods.some((method) => method.provider_code === 'chapa' && method.currency === item.currency) && <button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={(event) => startChapaCheckout(item, event.currentTarget.form)}>{messageBusy[item.id] ? 'Opening secure checkout…' : 'Pay securely with Chapa'}</button>}
                 <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Submitting…' : 'Submit payment record'}</button>
               </form>}
             </section>
