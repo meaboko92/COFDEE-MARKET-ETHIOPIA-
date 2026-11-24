@@ -1,7 +1,8 @@
 export default function PaymentAvailability() {
   const methods = [
+    { name: 'Telebirr', detail: 'Telebirr mobile-money payments can be offered after MEA BOKO verifies its business merchant account and adds official payment instructions. This listing does not initiate or confirm a payment.', status: 'Merchant setup required' },
     { name: 'Chapa checkout', detail: 'Planned online checkout for supported Ethiopian payment methods.', status: 'Activation required' },
-    { name: 'Visa / credit & debit cards', detail: 'Card payments can be offered through Chapa after merchant approval and live credentials are configured.', status: 'Not active yet' },
+    { name: 'Visa / credit & debit cards', detail: 'Card payments can be offered through a supported payment gateway after merchant approval and live credentials are configured.', status: 'Not active yet' },
     { name: 'Bank transfer', detail: 'Bank transfer instructions will be shown only after MEA BOKO adds and verifies its business account details.', status: 'Admin setup required' },
     { name: 'PayPal', detail: 'PayPal receiving is not currently confirmed for an Ethiopia-registered merchant.', status: 'Unavailable for now' },
   ];
