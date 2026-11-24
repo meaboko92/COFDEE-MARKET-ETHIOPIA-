@@ -241,6 +241,24 @@ async function browseExportCoffee(chatId: number) {
   await send(chatId, "🌍 APPROVED COFFEE OFFERS FOR EXPORT\n\n" + lines.join("\n\n") + "\n\nFor enquiries, contact MEA BOKO and quote the Offer ID.\n" + SITE_URL + "#marketplace");
 }
 
+async function registerTelegramWebhook() {
+  if (!BOT_TOKEN || !WEBHOOK_SECRET || !SUPABASE_URL) {
+    console.error("Telegram webhook setup skipped: required environment configuration is missing");
+    return;
+  }
+  const webhookUrl = `${SUPABASE_URL}/functions/v1/mea-boko-telegram`;
+  const ok = await telegram("setWebhook", {
+    url: webhookUrl,
+    secret_token: WEBHOOK_SECRET,
+    allowed_updates: ["message", "callback_query"],
+    drop_pending_updates: false,
+  });
+  if (ok) console.log("MEA BOKO Telegram webhook registration succeeded");
+  else console.error("MEA BOKO Telegram webhook registration failed");
+}
+
+await registerTelegramWebhook();
+
 Deno.serve(async (req: Request) => {
   if (req.method === "GET") return new Response("MEA BOKO Telegram webhook is ready.");
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
