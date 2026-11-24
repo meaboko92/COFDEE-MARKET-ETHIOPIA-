@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import AccountPanel from './AccountPanel';
+import PaymentMethodsPanel from './PaymentMethodsPanel';
 import AdminPanel from './AdminPanel';
 import SupplierListingPanel from './SupplierListingPanel';
 import MarketAssistant from './MarketAssistant';
@@ -333,6 +334,7 @@ export default function App() {
       </section>
 
       <AccountPanel />
+      <PaymentMethodsPanel />
       <SupplierListingPanel origins={origins} />
       <AdminPanel />
 
