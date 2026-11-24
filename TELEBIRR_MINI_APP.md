@@ -34,10 +34,14 @@ Important security requirements:
 
 - Existing MEA BOKO website and Supabase-backed marketplace: present in the repository.
 - Telebirr host detection and safe client bridge helper: added.
-- Telebirr merchant credentials, server-side create-order/signature/notification verification, database transaction schema, sandbox test and production approval: still required.
-- Do not advertise Telebirr as an active checkout method until the complete server-side verification flow has passed sandbox testing and the merchant account has been approved.
+- Telebirr UAT Edge Function `mea-boko-telebirr`: deployed, version 2, fixed to the official test-bed gateway.
+- Telebirr transaction schema: migration applied; provider values now allow Chapa and Telebirr, with unique provider references and transaction IDs.
+- Order panel: a Telebirr UAT button is wired to the server checkout and subsequent server-side verification. It appears only inside the Telebirr Mini App host and for ETB orders.
+- Merchant UAT credentials, provider callback allow-listing, end-to-end sandbox run and Telebirr Mini App approval: still required.
+- The website retains its existing payment choices. The Telebirr native checkout button is Mini App-only.
+- Do not treat the feature as active or use real funds. This function is sandbox-only and does not switch to production.
 
-The payment transaction table currently restricts its provider field to Chapa. A reviewed database migration is required before Telebirr transactions can be stored. Do not alter the live constraint until the Telebirr backend and notification verification are ready.
+See [TELEBIRR_SANDBOX_SETUP.md](./TELEBIRR_SANDBOX_SETUP.md) for the exact UAT secret names, callback URL and verification checklist.
 
 ## Official references
 
