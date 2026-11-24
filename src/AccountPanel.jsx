@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { isTelebirrMiniApp, startTelebirrPayment } from './lib/telebirr';
 
 const tradeDocumentTypes = [
   ['commercial_invoice','Commercial invoice'],['packing_list','Packing list'],['certificate_of_origin','Certificate of origin'],
@@ -454,6 +455,48 @@ export default function AccountPanel() {
     window.location.assign(data.checkout_url);
   }
 
+  async function startTelebirrCheckout(order, formElement) {
+    if (!user || !supabase || !formElement) return;
+    if (!isTelebirrMiniApp()) {
+      setError('Telebirr checkout is available only inside the approved Telebirr Mini App.');
+      return;
+    }
+    const form = new FormData(formElement);
+    const amount = Number(form.get('amount'));
+    const paymentStage = String(form.get('payment_stage') || 'full_payment');
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a payment amount greater than zero.');
+      return;
+    }
+    setMessageBusy((current) => ({ ...current, [order.id]: true }));
+    setError('');
+    setMessage('Preparing a Telebirr sandbox checkout. No live payment is enabled.');
+    const { data, error: checkoutError } = await supabase.functions.invoke('mea-boko-telebirr', {
+      body: { action: 'create_checkout', order_id: order.id, amount, payment_stage: paymentStage },
+    });
+    if (checkoutError || !data?.raw_request || !data?.merchant_reference) {
+      setMessageBusy((current) => ({ ...current, [order.id]: false }));
+      setError(data?.error || checkoutError?.message || 'Telebirr sandbox checkout could not be prepared.');
+      return;
+    }
+    try {
+      await startTelebirrPayment(data.raw_request);
+      const { data: verified, error: verifyError } = await supabase.functions.invoke('mea-boko-telebirr', {
+        body: { action: 'verify_payment', merchant_reference: data.merchant_reference },
+      });
+      if (verified?.status === 'success') {
+        setMessage('Telebirr sandbox payment was verified by the server.');
+        await loadAccount(user);
+      } else {
+        setMessage(verified?.message || verified?.error || verifyError?.message || 'Telebirr has not confirmed payment. The order remains unpaid until server verification succeeds.');
+      }
+    } catch (paymentError) {
+      setMessage(paymentError?.message || 'Telebirr checkout was cancelled or not completed. The order remains unpaid.');
+    } finally {
+      setMessageBusy((current) => ({ ...current, [order.id]: false }));
+    }
+  }
+
   async function submitPaymentRecord(order, event) {
     event.preventDefault();
     if (!user || !supabase || !['confirmed','fulfilled'].includes(order.status)) return;
@@ -774,6 +817,7 @@ export default function AccountPanel() {
                 <div className="form-row"><label>Method<select name="payment_method">{paymentMethods.filter((method) => method.currency === item.currency).length ? paymentMethods.filter((method) => method.currency === item.currency).map((method) => <option key={method.provider_code} value={method.provider_code}>{method.display_name}</option>) : <><option value="bank_transfer">Bank transfer</option><option value="mobile_money">Mobile money</option><option value="cash">Cash</option><option value="other">Other</option></>}</select></label><label>Payment date<input name="payment_date" type="date" /></label></div>
                 <label>Payment reference (optional)<input name="payment_reference" maxLength="180" placeholder="Reference from your provider" /></label>
                 <label>Notes (optional)<textarea name="notes" rows="2" maxLength="1200" placeholder="Additional information for the reviewer" /></label>
+                {isTelebirrMiniApp() && item.currency === 'ETB' && <button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={(event) => startTelebirrCheckout(item, event.currentTarget.form)}>{messageBusy[item.id] ? 'Preparing Telebirr sandbox…' : 'Test Telebirr checkout (UAT)'}</button>}
                 {paymentMethods.some((method) => method.provider_code.startsWith('chapa') && method.currency === item.currency) && <button type="button" className="button button-gold" disabled={Boolean(messageBusy[item.id])} onClick={(event) => startChapaCheckout(item, event.currentTarget.form)}>{messageBusy[item.id] ? 'Opening secure checkout…' : 'Pay securely with Chapa'}</button>}
                 <button className="button button-dark" disabled={Boolean(messageBusy[item.id])}>{messageBusy[item.id] ? 'Submitting…' : 'Submit payment record'}</button>
               </form>}
