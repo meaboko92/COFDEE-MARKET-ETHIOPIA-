@@ -20,10 +20,13 @@ export default function PaymentMethodsPanel() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const loadMethods = useCallback(async () => {
+  const loadMethods = useCallback(async (sessionUser) => {
     if (!supabase) return;
-    const { data: authData } = await supabase.auth.getUser();
-    const currentUser = authData?.user || null;
+    let currentUser = sessionUser;
+    if (typeof sessionUser === 'undefined') {
+      const { data: authData } = await supabase.auth.getUser();
+      currentUser = authData?.user || null;
+    }
     setUser(currentUser);
     let admin = false;
     if (currentUser) {
@@ -44,8 +47,8 @@ export default function PaymentMethodsPanel() {
   useEffect(() => {
     if (!supabase) return undefined;
     loadMethods();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      loadMethods();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadMethods(session?.user || null);
     });
     return () => listener.subscription.unsubscribe();
   }, [loadMethods]);
