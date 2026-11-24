@@ -143,6 +143,17 @@ export default function AccountPanel() {
   }, []);
 
   useEffect(() => {
+    if (!supabase) return undefined;
+    async function refreshPaymentMethods() {
+      const { data } = await supabase.from('payment_methods')
+        .select('provider_code,display_name,currency').eq('is_active', true).order('sort_order').order('display_name');
+      setPaymentMethods(data || []);
+    }
+    window.addEventListener('mea-boko-payment-methods-updated', refreshPaymentMethods);
+    return () => window.removeEventListener('mea-boko-payment-methods-updated', refreshPaymentMethods);
+  }, []);
+
+  useEffect(() => {
     if (!supabase) return;
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
