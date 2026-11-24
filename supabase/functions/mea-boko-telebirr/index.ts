@@ -70,7 +70,7 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
     "pkcs8",
     pemBytes(pem),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    { name: "RSA-PSS", hash: "SHA-256" },
     false,
     ["sign"],
   );
@@ -83,7 +83,7 @@ async function importPublicKey(pem: string): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
     "spki",
     pemBytes(pem),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    { name: "RSA-PSS", hash: "SHA-256" },
     false,
     ["verify"],
   );
@@ -113,7 +113,7 @@ function canonicalString(input: JsonObject): string {
 async function signRequest(input: JsonObject, privatePem: string): Promise<string> {
   const key = await importPrivateKey(privatePem);
   const bytes = new TextEncoder().encode(canonicalString(input));
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, bytes);
+  const signature = await crypto.subtle.sign({ name: "RSA-PSS", saltLength: 32 }, key, bytes);
   return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
@@ -124,7 +124,7 @@ async function verifyProviderSignature(input: JsonObject, publicPem: string): Pr
   const key = await importPublicKey(publicPem);
   const signatureBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0));
   return await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
+    { name: "RSA-PSS", saltLength: 32 },
     key,
     signatureBytes,
     new TextEncoder().encode(canonicalString(input)),
