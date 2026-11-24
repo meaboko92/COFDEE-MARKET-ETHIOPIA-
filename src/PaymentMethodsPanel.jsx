@@ -84,6 +84,7 @@ export default function PaymentMethodsPanel() {
     setForm(emptyForm);
     setMessage('Payment method registered as inactive. Review its public details, then activate it when ready.');
     await loadMethods();
+    window.dispatchEvent(new CustomEvent('mea-boko-payment-methods-updated'));
   }
 
   async function setMethodActive(method, isActive) {
@@ -99,6 +100,7 @@ export default function PaymentMethodsPanel() {
     else {
       setMessage(isActive ? 'Payment method is now visible to marketplace users.' : 'Payment method has been paused.');
       await loadMethods();
+      window.dispatchEvent(new CustomEvent('mea-boko-payment-methods-updated'));
     }
   }
 
@@ -113,6 +115,7 @@ export default function PaymentMethodsPanel() {
     else {
       setMessage('Payment method deleted.');
       await loadMethods();
+      window.dispatchEvent(new CustomEvent('mea-boko-payment-methods-updated'));
     }
   }
 
